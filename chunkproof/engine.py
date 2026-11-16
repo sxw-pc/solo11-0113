@@ -56,6 +56,7 @@ def receive(db_path,version,medium,root,receipt_path):
             data=candidate.read_bytes() if candidate.is_file() else None
             actual=sha(data) if data is not None else None
             status='missing' if data is None else ('wrong_version' if row is None else ('verified' if actual==row['sha256'] and len(data)==row['size'] else 'corrupt'))
+            if status=='verified' and item.get('sha256') and item['sha256']!=actual:status='claim_conflict'
             rid=db.execute('INSERT INTO receipt(attempt_id,chunk_id,medium,path,claimed_hash,actual_hash,actual_size,status) VALUES (?,?,?,?,?,?,?,?)',(aid,row['id'] if row else None,medium,rel,item.get('sha256'),actual,len(data) if data is not None else None,status)).lastrowid
             if row and status=='verified': db.execute("UPDATE chunk SET status='verified' WHERE id=?",(row['id'],))
             if status!='verified': db.execute('INSERT INTO issue(version,code,detail,receipt_id) VALUES (?,?,?,?)',(version,status,f'{logical}:{idx}',rid))
@@ -80,6 +81,7 @@ def verify_chunks(db_path,version,medium,root):
             data=candidate.read_bytes() if candidate.is_file() else None
             actual=sha(data) if data is not None else None
             status='missing' if data is None else ('wrong_version' if r['chunk_id'] is None else ('verified' if actual==r['expected'] and len(data)==r['expected_size'] else 'corrupt'))
+            if status=='verified' and r['claimed_hash'] and r['claimed_hash']!=actual:status='claim_conflict'
             db.execute('UPDATE receipt SET actual_hash=?,actual_size=?,status=? WHERE id=?',(actual,len(data) if data is not None else None,status,r['id']))
             if status!='verified':db.execute('INSERT INTO issue(version,code,detail,receipt_id) VALUES (?,?,?,?)',(version,status,r['path'],r['id']))
             out.append((r['id'],status))
@@ -105,7 +107,12 @@ def assemble(db_path,version,root,out):
                 stream.write(data)
         if target.exists() and sha(target.read_bytes())!=f['sha256']:
             temp.unlink();raise ValueError('output_conflict')
-        os.replace(temp,target);made.append(str(target))
+        os.replace(temp,target)
+        proof=[selected[f"{f['path']}:{c['idx']}"] for c in chunks]
+        with db:
+            db.execute('INSERT OR REPLACE INTO assembled_file(version,file_id,path,hash,receipt_ids) VALUES (?,?,?,?,?)',
+                       (version,f['id'],str(target),sha(target.read_bytes()),json.dumps(proof)))
+        made.append(str(target))
     db.close();return made
 
 def seal(db_path,version,out):
@@ -118,7 +125,15 @@ def seal(db_path,version,out):
             digest=hashlib.sha256();size=0
             with path.open('rb') as stream:
                 while part:=stream.read(1024*1024):digest.update(part);size+=len(part)
-            outcomes[f['path']]='verified' if size==f['size'] and digest.hexdigest()==f['sha256'] else 'corrupt'
+            if size!=f['size'] or digest.hexdigest()!=f['sha256']:
+                outcomes[f['path']]='corrupt';continue
+            proof=db.execute('SELECT * FROM assembled_file WHERE version=? AND file_id=?',(version,f['id'])).fetchone()
+            required=list(db.execute('SELECT id FROM chunk WHERE file_id=?',(f['id'],)))
+            receipt_ids=json.loads(proof['receipt_ids']) if proof else []
+            verified={r['chunk_id'] for rid in receipt_ids for r in db.execute(
+                "SELECT chunk_id FROM receipt WHERE id=? AND status='verified'",(rid,))}
+            outcomes[f['path']]='verified' if (proof and Path(proof['path']).resolve()==path.resolve()
+                and proof['hash']==digest.hexdigest() and verified=={c['id'] for c in required}) else 'unproven'
         status='可发布' if outcomes and all(x=='verified' for x in outcomes.values()) else ('拒收' if 'corrupt' in outcomes.values() else '证据不足')
         db.execute('INSERT INTO decision(version,result,detail) VALUES (?,?,?)',(version,status,json.dumps(outcomes,sort_keys=True)))
         db.execute('UPDATE delivery SET status=? WHERE id=(SELECT delivery_id FROM manifest WHERE version=?)',(status,version))
@@ -129,7 +144,8 @@ def report(db_path,version,path):
     'chunks':[dict(r) for r in db.execute('SELECT c.id,f.path,c.idx,c.start,c.end,c.sha256 FROM chunk c JOIN file_entry f ON f.id=c.file_id WHERE f.version=?',(version,))],
     'receipts':[dict(r) for r in db.execute('SELECT r.id,r.medium,r.path,r.actual_hash,r.status,a.source_hash FROM receipt r JOIN attempt a ON a.id=r.attempt_id WHERE a.version=?',(version,))],
     'issues':[dict(r) for r in db.execute('SELECT code,detail,receipt_id FROM issue WHERE version=?',(version,))],
-    'decision':[dict(r) for r in db.execute('SELECT result,detail FROM decision WHERE version=?',(version,))]}
+    'decision':[dict(r) for r in db.execute('SELECT result,detail FROM decision WHERE version=?',(version,))],
+    'assemblies':[dict(r) for r in db.execute('SELECT file_id,path,hash,receipt_ids FROM assembled_file WHERE version=?',(version,))]}
     path=Path(path);path.parent.mkdir(parents=True,exist_ok=True);path.write_text(json.dumps(obj,ensure_ascii=False,indent=2),encoding='utf-8')
     path.with_suffix('.md').write_text('# 分段传验报告\n\n'+f"结论：{obj['decision'][0]['result'] if obj['decision'] else '未封验'}\n\n"+json.dumps(obj,ensure_ascii=False,indent=2),encoding='utf-8')
     db.close();return path

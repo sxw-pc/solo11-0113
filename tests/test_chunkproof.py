@@ -105,3 +105,24 @@ def test_assemble_from_multiple_media_roots(tmp_path):
 def test_seal_rejects_wrong_whole_file(tmp_path):
     src,db,v=setup(tmp_path);out=tmp_path/'out';out.mkdir();(out/'f').write_bytes(b'abcdefghix')
     assert engine.seal(db,v,out)=='拒收'
+
+
+def test_matching_file_without_verified_assembly_cannot_publish(tmp_path):
+    src,db,v=setup(tmp_path)
+    out=tmp_path/'out';out.mkdir();(out/'f').write_bytes((src/'f').read_bytes())
+    assert engine.seal(db,v,out)=='证据不足'
+    report=json.loads(engine.report(db,v,tmp_path/'proof.json').read_text(encoding='utf-8'))
+    assert report['decision'][0]['result']=='证据不足'
+    assert report['assemblies']==[]
+
+
+def test_receipt_claim_conflict_blocks_release_despite_good_bytes(tmp_path):
+    src,db,v=setup(tmp_path,b'abcd')
+    medium=tmp_path/'medium';medium.mkdir();(medium/'part').write_bytes(b'abcd')
+    receipt=tmp_path/'receipt.jsonl'
+    receipt.write_text(json.dumps({'file':'f','path':'part','index':0,'sha256':'0'*64}))
+    engine.receive(db,v,'m',medium,receipt)
+    assert engine.reconcile(db,v)['f:0'] is None
+    assert engine.verify_chunks(db,v,'m',medium)[0][1]=='claim_conflict'
+    assert engine.assemble(db,v,medium,tmp_path/'out')==[]
+    assert engine.seal(db,v,tmp_path/'out')=='证据不足'

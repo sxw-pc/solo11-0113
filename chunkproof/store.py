@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS chunk(id INTEGER PRIMARY KEY,file_id INTEGER NOT NULL
 CREATE TABLE IF NOT EXISTS attempt(id INTEGER PRIMARY KEY,version TEXT NOT NULL REFERENCES manifest(version),medium TEXT NOT NULL,source_hash TEXT NOT NULL,source BLOB NOT NULL,root TEXT NOT NULL,created TEXT DEFAULT CURRENT_TIMESTAMP,UNIQUE(version,medium,source_hash));
 CREATE TABLE IF NOT EXISTS receipt(id INTEGER PRIMARY KEY,attempt_id INTEGER NOT NULL REFERENCES attempt(id),chunk_id INTEGER REFERENCES chunk(id),medium TEXT NOT NULL,path TEXT NOT NULL,claimed_hash TEXT,actual_hash TEXT,actual_size INTEGER,status TEXT NOT NULL,UNIQUE(attempt_id,medium,path));
 CREATE TABLE IF NOT EXISTS issue(id INTEGER PRIMARY KEY,version TEXT NOT NULL,code TEXT NOT NULL,detail TEXT NOT NULL,receipt_id INTEGER REFERENCES receipt(id));
+CREATE TABLE IF NOT EXISTS assembled_file(version TEXT NOT NULL REFERENCES manifest(version),file_id INTEGER NOT NULL REFERENCES file_entry(id),path TEXT NOT NULL,hash TEXT NOT NULL,receipt_ids TEXT NOT NULL,PRIMARY KEY(version,file_id));
 CREATE TABLE IF NOT EXISTS decision(version TEXT PRIMARY KEY,result TEXT NOT NULL,detail TEXT NOT NULL,created TEXT DEFAULT CURRENT_TIMESTAMP);
 """
 def connect(path):
