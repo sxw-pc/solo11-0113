@@ -12,6 +12,10 @@ CREATE TABLE IF NOT EXISTS receipt(id INTEGER PRIMARY KEY,attempt_id INTEGER NOT
 CREATE TABLE IF NOT EXISTS issue(id INTEGER PRIMARY KEY,version TEXT NOT NULL,code TEXT NOT NULL,detail TEXT NOT NULL,receipt_id INTEGER REFERENCES receipt(id));
 CREATE TABLE IF NOT EXISTS assembled_file(version TEXT NOT NULL REFERENCES manifest(version),file_id INTEGER NOT NULL REFERENCES file_entry(id),path TEXT NOT NULL,hash TEXT NOT NULL,receipt_ids TEXT NOT NULL,PRIMARY KEY(version,file_id));
 CREATE TABLE IF NOT EXISTS decision(version TEXT PRIMARY KEY,result TEXT NOT NULL,detail TEXT NOT NULL,created TEXT DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS custody_event(id INTEGER PRIMARY KEY,medium TEXT NOT NULL,seq INTEGER NOT NULL,from_holder TEXT NOT NULL,to_holder TEXT NOT NULL,at TEXT NOT NULL,version TEXT NOT NULL REFERENCES manifest(version),status TEXT NOT NULL,UNIQUE(medium,seq));
+CREATE TABLE IF NOT EXISTS recipient(id TEXT PRIMARY KEY,deadline TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS acknowledgement(id INTEGER PRIMARY KEY,recipient_id TEXT NOT NULL REFERENCES recipient(id),version TEXT NOT NULL REFERENCES manifest(version),manifest_hash TEXT NOT NULL,at TEXT NOT NULL,claim TEXT NOT NULL,UNIQUE(recipient_id,version,at));
+CREATE TABLE IF NOT EXISTS acceptance(recipient_id TEXT NOT NULL REFERENCES recipient(id),version TEXT NOT NULL REFERENCES manifest(version),result TEXT NOT NULL,reason TEXT NOT NULL,PRIMARY KEY(recipient_id,version));
 """
 def connect(path):
     path=Path(path); path.parent.mkdir(parents=True,exist_ok=True)

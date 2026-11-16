@@ -145,7 +145,9 @@ def report(db_path,version,path):
     'receipts':[dict(r) for r in db.execute('SELECT r.id,r.medium,r.path,r.actual_hash,r.status,a.source_hash FROM receipt r JOIN attempt a ON a.id=r.attempt_id WHERE a.version=?',(version,))],
     'issues':[dict(r) for r in db.execute('SELECT code,detail,receipt_id FROM issue WHERE version=?',(version,))],
     'decision':[dict(r) for r in db.execute('SELECT result,detail FROM decision WHERE version=?',(version,))],
-    'assemblies':[dict(r) for r in db.execute('SELECT file_id,path,hash,receipt_ids FROM assembled_file WHERE version=?',(version,))]}
+    'assemblies':[dict(r) for r in db.execute('SELECT file_id,path,hash,receipt_ids FROM assembled_file WHERE version=?',(version,))],
+    'custody':[dict(r) for r in db.execute('SELECT medium,seq,from_holder,to_holder,at,status FROM custody_event WHERE version=? ORDER BY medium,seq',(version,))],
+    'acceptance':[dict(r) for r in db.execute('SELECT recipient_id,result,reason FROM acceptance WHERE version=? ORDER BY recipient_id',(version,))]}
     path=Path(path);path.parent.mkdir(parents=True,exist_ok=True);path.write_text(json.dumps(obj,ensure_ascii=False,indent=2),encoding='utf-8')
     path.with_suffix('.md').write_text('# 分段传验报告\n\n'+f"结论：{obj['decision'][0]['result'] if obj['decision'] else '未封验'}\n\n"+json.dumps(obj,ensure_ascii=False,indent=2),encoding='utf-8')
     db.close();return path

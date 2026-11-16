@@ -2,7 +2,7 @@ import argparse
 import json
 import tempfile
 from pathlib import Path
-from . import engine
+from . import engine, custody
 
 def demo():
     root=Path(tempfile.mkdtemp(prefix='chunkproof-'));src=root/'source';src.mkdir();(src/'sample.dat').write_bytes(b'abcdefghij')
@@ -15,7 +15,13 @@ def demo():
     receipts=root/'receipts.jsonl';receipts.write_text('\n'.join(rows),encoding='utf-8')
     engine.receive(db,version,'medium-1',media,receipts)
     engine.assemble(db,version,media,root/'out')
-    result=engine.seal(db,version,root/'out');print(engine.report(db,version,root/'report.json'));print(result)
+    result=engine.seal(db,version,root/'out')
+    custody.transfer(db,version,'medium-1',1,'origin','carrier','2026-01-01T08:00:00Z')
+    custody.recipient(db,'recipient-1','2026-01-02T00:00:00Z')
+    from .store import connect
+    ledger=connect(db);body_hash=ledger.execute('SELECT body_hash FROM manifest WHERE version=?',(version,)).fetchone()['body_hash'];ledger.close()
+    custody.acknowledge(db,'recipient-1',version,body_hash,'2026-01-01T09:00:00Z','accepted')
+    print(engine.report(db,version,root/'report.json'));print(result,custody.decide(db,'recipient-1',version))
 
 def main():
     p=argparse.ArgumentParser();sub=p.add_subparsers(dest='command',required=True)
@@ -23,6 +29,10 @@ def main():
     m=sub.add_parser('manifest');m.add_argument('--db',required=True);m.add_argument('--delivery',required=True);m.add_argument('--root',required=True);m.add_argument('--block',type=int,default=4)
     a=sub.add_parser('plan');a.add_argument('--db',required=True);a.add_argument('--version',required=True)
     r=sub.add_parser('receive');r.add_argument('--db',required=True);r.add_argument('--version',required=True);r.add_argument('--medium',required=True);r.add_argument('--root',required=True);r.add_argument('--receipts',required=True)
+    t=sub.add_parser('custody-transfer');t.add_argument('--db',required=True);t.add_argument('--version',required=True);t.add_argument('--medium',required=True);t.add_argument('--seq',type=int,required=True);t.add_argument('--from-holder',required=True);t.add_argument('--to-holder',required=True);t.add_argument('--at',required=True)
+    a=sub.add_parser('recipient');a.add_argument('--db',required=True);a.add_argument('--name',required=True);a.add_argument('--deadline',required=True)
+    a=sub.add_parser('acknowledge');a.add_argument('--db',required=True);a.add_argument('--name',required=True);a.add_argument('--version',required=True);a.add_argument('--manifest-hash',required=True);a.add_argument('--at',required=True);a.add_argument('--claim',required=True)
+    a=sub.add_parser('acceptance');a.add_argument('--db',required=True);a.add_argument('--name',required=True);a.add_argument('--version',required=True)
     for command in ('verify-chunks','reconcile','assemble','seal','report'):
         q=sub.add_parser(command);q.add_argument('--db',required=True);q.add_argument('--version',required=True)
         if command=='verify-chunks':q.add_argument('--medium',required=True);q.add_argument('--root',required=True)
@@ -34,6 +44,10 @@ def main():
     elif x.command=='manifest':print(engine.manifest(x.db,x.delivery,x.root,x.block))
     elif x.command=='plan':print(json.dumps(engine.plan(x.db,x.version)))
     elif x.command=='receive':print(engine.receive(x.db,x.version,x.medium,x.root,x.receipts))
+    elif x.command=='custody-transfer':print(custody.transfer(x.db,x.version,x.medium,x.seq,x.from_holder,x.to_holder,x.at))
+    elif x.command=='recipient':custody.recipient(x.db,x.name,x.deadline)
+    elif x.command=='acknowledge':print(custody.acknowledge(x.db,x.name,x.version,x.manifest_hash,x.at,x.claim))
+    elif x.command=='acceptance':print(custody.decide(x.db,x.name,x.version))
     elif x.command=='verify-chunks':print(engine.verify_chunks(x.db,x.version,x.medium,x.root))
     elif x.command=='reconcile':print(json.dumps(engine.reconcile(x.db,x.version)))
     elif x.command=='assemble':print(engine.assemble(x.db,x.version,x.root,x.out))
