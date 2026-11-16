@@ -101,3 +101,7 @@ def test_assemble_from_multiple_media_roots(tmp_path):
         engine.receive(db,v,f'm{idx}',medium,receipt)
     out=tmp_path/'out';engine.assemble(db,v,tmp_path,out)
     assert (out/'f').read_bytes()==data
+
+def test_seal_rejects_wrong_whole_file(tmp_path):
+    src,db,v=setup(tmp_path);out=tmp_path/'out';out.mkdir();(out/'f').write_bytes(b'abcdefghix')
+    assert engine.seal(db,v,out)=='拒收'
