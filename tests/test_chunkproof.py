@@ -92,3 +92,12 @@ def test_multiple_media_selects_verified_candidate(tmp_path):
     two.write_text(json.dumps({'file':'f','path':'p','index':0,'medium':'good'}))
     engine.receive(db,v,'bad',bad,one);engine.receive(db,v,'good',good,two)
     assert engine.reconcile(db,v)['f:0'] is not None
+
+def test_assemble_from_multiple_media_roots(tmp_path):
+    src,db,v=setup(tmp_path);data=(src/'f').read_bytes()
+    for idx,c in enumerate(engine.plan(db,v)):
+        medium=tmp_path/f'm{idx}';medium.mkdir();(medium/'part').write_bytes(data[c['start']:c['end']])
+        receipt=tmp_path/f'r{idx}.jsonl';receipt.write_text(json.dumps({'file':'f','path':'part','index':idx}),encoding='utf-8')
+        engine.receive(db,v,f'm{idx}',medium,receipt)
+    out=tmp_path/'out';engine.assemble(db,v,tmp_path,out)
+    assert (out/'f').read_bytes()==data

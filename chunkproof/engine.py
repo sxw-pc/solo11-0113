@@ -46,9 +46,9 @@ def receive(db_path,version,medium,root,receipt_path):
     db=connect(db_path);count=0
     with db:
         if not db.execute('SELECT 1 FROM manifest WHERE version=?',(version,)).fetchone(): raise ValueError('unknown_version')
-        old=db.execute('SELECT id FROM attempt WHERE version=? AND source_hash=?',(version,sha(raw))).fetchone()
+        old=db.execute('SELECT id FROM attempt WHERE version=? AND medium=? AND source_hash=?',(version,medium,sha(raw))).fetchone()
         if old:return 0
-        aid=db.execute('INSERT INTO attempt(version,source_hash,source) VALUES (?,?,?)',(version,sha(raw),raw)).lastrowid
+        aid=db.execute('INSERT INTO attempt(version,medium,source_hash,source,root) VALUES (?,?,?,?,?)',(version,medium,sha(raw),raw,str(root))).lastrowid
         for item in records:
             rel=safe_path(item['path']); logical=safe_path(item['file']); idx=int(item['index']); candidate=(root/rel).resolve()
             if not candidate.is_relative_to(root): raise ValueError('unsafe_path')
@@ -97,8 +97,10 @@ def assemble(db_path,version,root,out):
         with temp.open('wb') as stream:
             for c in chunks:
                 rid=selected[f"{f['path']}:{c['idx']}"]
-                rec=db.execute('SELECT path FROM receipt WHERE id=?',(rid,)).fetchone()
-                data=(root/rec['path']).read_bytes()
+                rec=db.execute('SELECT r.path,a.root FROM receipt r JOIN attempt a ON a.id=r.attempt_id WHERE r.id=?',(rid,)).fetchone()
+                candidate=(Path(rec['root'])/rec['path']).resolve()
+                if not candidate.is_relative_to(Path(rec['root']).resolve()):raise ValueError('unsafe_path')
+                data=candidate.read_bytes()
                 if sha(data)!=c['sha256'] or len(data)!=c['end']-c['start']: raise ValueError('source_changed')
                 stream.write(data)
         if target.exists() and sha(target.read_bytes())!=f['sha256']:
