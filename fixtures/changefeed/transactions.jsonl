@@ -1,0 +1,7 @@
+{"tx_id":"t1","source":"A","source_seq":1,"parents":[],"expected_rows":1,"authority":1}
+{"tx_id":"t3","source":"A","source_seq":3,"parents":["t1"],"expected_rows":1,"authority":1}
+{"tx_id":"t4","source":"B","source_seq":1,"parents":["t1"],"expected_rows":1,"authority":1}
+{"tx_id":"t5","source":"B","source_seq":2,"parents":["t4"],"expected_rows":2,"authority":1}
+{"tx_id":"t6","source":"C","source_seq":1,"parents":["t1"],"expected_rows":2,"authority":5}
+{"tx_id":"t7","source":"D","source_seq":1,"parents":["t1"],"expected_rows":1,"authority":1}
+{"tx_id":"t8","source":"E","source_seq":1,"parents":["t1"],"expected_rows":1,"authority":1}

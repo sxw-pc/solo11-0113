@@ -1,0 +1,8 @@
+{"tx_id":"t1","ordinal":0,"entity_key":"a","op":"put","value":10}
+{"tx_id":"t3","ordinal":0,"entity_key":"b","op":"put","value":20}
+{"tx_id":"t4","ordinal":0,"entity_key":"c","op":"put","value":30}
+{"tx_id":"t5","ordinal":0,"entity_key":"d","op":"put","value":40}
+{"tx_id":"t6","ordinal":0,"entity_key":"x","op":"put","value":100}
+{"tx_id":"t6","ordinal":1,"entity_key":"y","op":"put","value":100}
+{"tx_id":"t7","ordinal":0,"entity_key":"x","op":"put","value":7}
+{"tx_id":"t8","ordinal":0,"entity_key":"y","op":"put","value":8}
