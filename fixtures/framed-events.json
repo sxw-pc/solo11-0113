@@ -1,0 +1,1 @@
+{"events":[{"event_id":"e1","kind":"arrival","text":"CPR1 appears inside a valid payload"},{"event_id":"e2","kind":"arrival","text":"middle frame"},{"event_id":"e3","kind":"departure","text":"later intact frame"}],"corrupt_sequence":2}
