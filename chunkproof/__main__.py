@@ -2,7 +2,7 @@ import argparse
 import json
 import tempfile
 from pathlib import Path
-from . import engine, custody, rollout
+from . import engine, custody, rollout, telemetry
 
 def demo():
     root=Path(tempfile.mkdtemp(prefix='chunkproof-'));src=root/'source';src.mkdir();(src/'sample.dat').write_bytes(b'abcdefghij')
@@ -37,6 +37,8 @@ def main():
     a=sub.add_parser('acceptance');a.add_argument('--db',required=True);a.add_argument('--name',required=True);a.add_argument('--version',required=True)
     a=sub.add_parser('rollout-create');a.add_argument('--db',required=True);a.add_argument('--id',required=True);a.add_argument('--version',required=True);a.add_argument('--policy',required=True)
     a=sub.add_parser('rollout-evaluate');a.add_argument('--db',required=True);a.add_argument('--id',required=True)
+    a=sub.add_parser('telemetry-register');a.add_argument('--db',required=True);a.add_argument('--id',required=True);a.add_argument('--version',required=True);a.add_argument('--spec',required=True)
+    a=sub.add_parser('telemetry-inspect');a.add_argument('--db',required=True);a.add_argument('--id',required=True)
     for command in ('verify-chunks','reconcile','assemble','seal','report'):
         q=sub.add_parser(command);q.add_argument('--db',required=True);q.add_argument('--version',required=True)
         if command=='verify-chunks':q.add_argument('--medium',required=True);q.add_argument('--root',required=True)
@@ -54,6 +56,8 @@ def main():
     elif x.command=='acceptance':print(custody.decide(x.db,x.name,x.version))
     elif x.command=='rollout-create':print(rollout.create(x.db,x.id,x.version,json.loads(Path(x.policy).read_text(encoding='utf-8'))))
     elif x.command=='rollout-evaluate':print(rollout.evaluate(x.db,x.id))
+    elif x.command=='telemetry-register':print(telemetry.register(x.db,x.id,x.version,x.spec))
+    elif x.command=='telemetry-inspect':print(json.dumps(telemetry.inspect(x.db,x.id),ensure_ascii=False))
     elif x.command=='verify-chunks':print(engine.verify_chunks(x.db,x.version,x.medium,x.root))
     elif x.command=='reconcile':print(json.dumps(engine.reconcile(x.db,x.version)))
     elif x.command=='assemble':print(engine.assemble(x.db,x.version,x.root,x.out))
