@@ -13,3 +13,7 @@
 `custody-transfer` 记录介质交接链，`recipient` 冻结收件要求，`acknowledge` 记录回执，`acceptance` 作最终验收。交接链断裂或隔离介质会使已封验文件仍待核；清单摘要不一致、回执冲突或超期分别产生不同验收结论。相关记录均保存在 SQLite 台账，`demo` 覆盖完整交付。
 
 `rollout-create` 将收件人分入不可变的发布波次，指定权重、通过门槛和必达收件人。`rollout-evaluate` 从实际验收记录计算每波次能否开放、等待、中止或完成；试点未完成时后续波次不开放，必达收件人争议会中止发布。逐收件结论保存在 `rollout_decision`。
+
+## 已封验实体数据清单
+
+`entity-register` 从已封验的两个 JSONL 来源文件及候选关联边文件中冻结伪名化记录、来源内本地 ID 和正整数边权；`entity-inspect` 只报告原始记录量与候选边数，不推断跨来源是否为同一实体。`fixtures/entity-feed/` 和 `fixtures/entity-feed-spec.json` 是可用 `tests/test_entities.py` 离线运行的合成样例，不含真实个人信息。

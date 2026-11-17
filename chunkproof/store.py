@@ -20,6 +20,9 @@ CREATE TABLE IF NOT EXISTS rollout(id TEXT PRIMARY KEY,version TEXT NOT NULL REF
 CREATE TABLE IF NOT EXISTS rollout_wave(rollout_id TEXT REFERENCES rollout(id),ordinal INT NOT NULL,name TEXT NOT NULL,quorum INT NOT NULL,status TEXT NOT NULL,PRIMARY KEY(rollout_id,ordinal));
 CREATE TABLE IF NOT EXISTS rollout_member(rollout_id TEXT NOT NULL,ordinal INT NOT NULL,recipient_id TEXT NOT NULL REFERENCES recipient(id),weight INT NOT NULL,mandatory INT NOT NULL,PRIMARY KEY(rollout_id,ordinal,recipient_id),FOREIGN KEY(rollout_id,ordinal) REFERENCES rollout_wave(rollout_id,ordinal));
 CREATE TABLE IF NOT EXISTS rollout_decision(rollout_id TEXT NOT NULL,ordinal INT NOT NULL,recipient_id TEXT NOT NULL,result TEXT NOT NULL,reason TEXT NOT NULL,PRIMARY KEY(rollout_id,ordinal,recipient_id));
+CREATE TABLE IF NOT EXISTS entity_feed(id TEXT PRIMARY KEY,version TEXT NOT NULL REFERENCES manifest(version),spec_hash TEXT NOT NULL,spec BLOB NOT NULL);
+CREATE TABLE IF NOT EXISTS entity_row(feed_id TEXT NOT NULL REFERENCES entity_feed(id),source TEXT NOT NULL,local_id TEXT NOT NULL,cohort TEXT NOT NULL,PRIMARY KEY(feed_id,source,local_id));
+CREATE TABLE IF NOT EXISTS entity_link(feed_id TEXT NOT NULL REFERENCES entity_feed(id),left_id TEXT NOT NULL,right_id TEXT NOT NULL,weight INTEGER NOT NULL,PRIMARY KEY(feed_id,left_id,right_id));
 """
 def connect(path):
     path=Path(path); path.parent.mkdir(parents=True,exist_ok=True)
