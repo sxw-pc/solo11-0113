@@ -20,6 +20,8 @@ CREATE TABLE IF NOT EXISTS rollout(id TEXT PRIMARY KEY,version TEXT NOT NULL REF
 CREATE TABLE IF NOT EXISTS rollout_wave(rollout_id TEXT REFERENCES rollout(id),ordinal INT NOT NULL,name TEXT NOT NULL,quorum INT NOT NULL,status TEXT NOT NULL,PRIMARY KEY(rollout_id,ordinal));
 CREATE TABLE IF NOT EXISTS rollout_member(rollout_id TEXT NOT NULL,ordinal INT NOT NULL,recipient_id TEXT NOT NULL REFERENCES recipient(id),weight INT NOT NULL,mandatory INT NOT NULL,PRIMARY KEY(rollout_id,ordinal,recipient_id),FOREIGN KEY(rollout_id,ordinal) REFERENCES rollout_wave(rollout_id,ordinal));
 CREATE TABLE IF NOT EXISTS rollout_decision(rollout_id TEXT NOT NULL,ordinal INT NOT NULL,recipient_id TEXT NOT NULL,result TEXT NOT NULL,reason TEXT NOT NULL,PRIMARY KEY(rollout_id,ordinal,recipient_id));
+CREATE TABLE IF NOT EXISTS terrain_grid(id TEXT PRIMARY KEY,version TEXT NOT NULL REFERENCES manifest(version),spec_hash TEXT NOT NULL,spec BLOB NOT NULL);
+CREATE TABLE IF NOT EXISTS terrain_cell(grid_id TEXT NOT NULL REFERENCES terrain_grid(id),x INTEGER NOT NULL,y INTEGER NOT NULL,height INTEGER NOT NULL,runoff INTEGER NOT NULL,outlet TEXT,PRIMARY KEY(grid_id,x,y));
 """
 def connect(path):
     path=Path(path); path.parent.mkdir(parents=True,exist_ok=True)

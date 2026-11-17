@@ -13,3 +13,7 @@
 `custody-transfer` 记录介质交接链，`recipient` 冻结收件要求，`acknowledge` 记录回执，`acceptance` 作最终验收。交接链断裂或隔离介质会使已封验文件仍待核；清单摘要不一致、回执冲突或超期分别产生不同验收结论。相关记录均保存在 SQLite 台账，`demo` 覆盖完整交付。
 
 `rollout-create` 将收件人分入不可变的发布波次，指定权重、通过门槛和必达收件人。`rollout-evaluate` 从实际验收记录计算每波次能否开放、等待、中止或完成；试点未完成时后续波次不开放，必达收件人争议会中止发布。逐收件结论保存在 `rollout_decision`。
+
+## 已封验地形格网
+
+`terrain-register` 从已封验 JSONL 冻结整数坐标/高程、非负本地径流和出口；`terrain-inspect` 只清点格点、原始径流与出口数，不做任何流向或汇水计算。`fixtures/terrain-branch/` 与 `fixtures/terrain-flat/` 是 `tests/test_terrain.py` 可离线运行的合成资料。
