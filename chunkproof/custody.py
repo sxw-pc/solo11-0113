@@ -58,15 +58,28 @@ def decide(path,name,version):
             if not recipient or not manifest:raise ValueError('unknown_contract')
             seal=db.execute('SELECT result FROM decision WHERE version=?',(version,)).fetchone()
             acks=list(db.execute('SELECT * FROM acknowledgement WHERE recipient_id=? AND version=? ORDER BY at,id',(name,version)))
-            media=list(db.execute('SELECT DISTINCT r.medium FROM assembled_file f JOIN json_each(f.receipt_ids) j JOIN receipt r ON r.id=j.value WHERE f.version=?',(version,)))
-            statuses=[db.execute('SELECT status,version FROM custody_event WHERE medium=? ORDER BY seq DESC LIMIT 1',(m['medium'],)).fetchone() for m in media]
+            receipt_media=[r['medium'] for r in db.execute(
+                'SELECT DISTINCT r.medium FROM assembled_file f JOIN json_each(f.receipt_ids) j JOIN receipt r ON r.id=j.value WHERE f.version=?',(version,))]
+            reuse_rows=list(db.execute(
+                'SELECT DISTINCT rp.id AS proof_id FROM reuse_proof rp JOIN assembled_proof ap '
+                "ON ap.kind='reuse' AND ap.proof_id=rp.id WHERE rp.version=?",(version,)))
+            statuses=[db.execute('SELECT status,version FROM custody_event WHERE medium=? ORDER BY seq DESC LIMIT 1',(m,)).fetchone() for m in receipt_media]
             if not seal or seal['result']!='可发布':result,reason='待核','unsealed'
-            elif not media or any(not x or x['version']!=version or x['status']!='trusted' for x in statuses):result,reason='待核','custody_untrusted'
-            elif any(x['manifest_hash']!=manifest['body_hash'] for x in acks):result,reason='争议','manifest_mismatch'
-            elif any(x['claim']=='rejected' for x in acks):result,reason='拒收','recipient_rejected'
-            elif not acks:result,reason='待回执','ack_missing'
-            elif instant(acks[-1]['at'])>instant(recipient['deadline']):result,reason='逾期','after_deadline'
-            else:result,reason='已交付','verified_acceptance'
+            elif not receipt_media and not reuse_rows:result,reason='待核','custody_untrusted'
+            elif any(not x or x['version']!=version or x['status']!='trusted' for x in statuses):result,reason='待核','custody_untrusted'
+            else:
+                from .reuse import proof_current
+                reuse_bad=False
+                for row in reuse_rows:
+                    rp=db.execute('SELECT * FROM reuse_proof WHERE id=?',(row['proof_id'],)).fetchone()
+                    ok,_=proof_current(db,rp) if rp else (False,None)
+                    if not ok:reuse_bad=True;break
+                if reuse_bad:result,reason='待核','reuse_custody_untrusted'
+                elif any(x['manifest_hash']!=manifest['body_hash'] for x in acks):result,reason='争议','manifest_mismatch'
+                elif any(x['claim']=='rejected' for x in acks):result,reason='拒收','recipient_rejected'
+                elif not acks:result,reason='待回执','ack_missing'
+                elif instant(acks[-1]['at'])>instant(recipient['deadline']):result,reason='逾期','after_deadline'
+                else:result,reason='已交付','verified_acceptance'
             db.execute('INSERT INTO acceptance VALUES (?,?,?,?) ON CONFLICT(recipient_id,version) DO UPDATE SET result=excluded.result,reason=excluded.reason',(name,version,result,reason))
             return {'result':result,'reason':reason}
     finally:db.close()

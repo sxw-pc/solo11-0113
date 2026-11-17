@@ -20,6 +20,9 @@ CREATE TABLE IF NOT EXISTS rollout(id TEXT PRIMARY KEY,version TEXT NOT NULL REF
 CREATE TABLE IF NOT EXISTS rollout_wave(rollout_id TEXT REFERENCES rollout(id),ordinal INT NOT NULL,name TEXT NOT NULL,quorum INT NOT NULL,status TEXT NOT NULL,PRIMARY KEY(rollout_id,ordinal));
 CREATE TABLE IF NOT EXISTS rollout_member(rollout_id TEXT NOT NULL,ordinal INT NOT NULL,recipient_id TEXT NOT NULL REFERENCES recipient(id),weight INT NOT NULL,mandatory INT NOT NULL,PRIMARY KEY(rollout_id,ordinal,recipient_id),FOREIGN KEY(rollout_id,ordinal) REFERENCES rollout_wave(rollout_id,ordinal));
 CREATE TABLE IF NOT EXISTS rollout_decision(rollout_id TEXT NOT NULL,ordinal INT NOT NULL,recipient_id TEXT NOT NULL,result TEXT NOT NULL,reason TEXT NOT NULL,PRIMARY KEY(rollout_id,ordinal,recipient_id));
+CREATE TABLE IF NOT EXISTS reuse_plan(id TEXT PRIMARY KEY,version TEXT NOT NULL REFERENCES manifest(version),contract TEXT NOT NULL,recipients TEXT NOT NULL,old_versions TEXT NOT NULL,frozen TEXT NOT NULL,created TEXT DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS reuse_proof(id INTEGER PRIMARY KEY,plan_id TEXT NOT NULL REFERENCES reuse_plan(id),version TEXT NOT NULL REFERENCES manifest(version),chunk_id INTEGER NOT NULL REFERENCES chunk(id),old_version TEXT NOT NULL,old_receipt_id INTEGER NOT NULL REFERENCES receipt(id),source_medium TEXT NOT NULL,source_root TEXT NOT NULL,source_path TEXT NOT NULL,sha256 TEXT NOT NULL,size INTEGER NOT NULL,status TEXT NOT NULL,UNIQUE(version,chunk_id));
+CREATE TABLE IF NOT EXISTS assembled_proof(version TEXT NOT NULL,file_id INTEGER NOT NULL,position INTEGER NOT NULL,kind TEXT NOT NULL,proof_id INTEGER NOT NULL,PRIMARY KEY(version,file_id,position));
 """
 def connect(path):
     path=Path(path); path.parent.mkdir(parents=True,exist_ok=True)

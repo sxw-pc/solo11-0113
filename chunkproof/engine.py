@@ -87,35 +87,74 @@ def verify_chunks(db_path,version,medium,root):
             out.append((r['id'],status))
     db.close();return out
 
-def assemble(db_path,version,root,out):
+def assemble(db_path,version,root,out,plan=None):
+    from . import reuse
     db=connect(db_path); root=Path(root).resolve();out=Path(out);out.mkdir(parents=True,exist_ok=True)
+    plan_items=None;plan_id=None
+    if plan is not None:
+        if plan.get('version')!=version: raise ValueError('plan_version_mismatch')
+        if plan.get('contract') not in reuse.CONTRACTS: raise ValueError('unknown_contract')
+        plan_id=plan['plan_id']
+        if not db.execute('SELECT 1 FROM reuse_plan WHERE id=?',(plan_id,)).fetchone():
+            raise ValueError('plan_not_frozen')
+        fresh=reuse.reuse_plan(db_path,version,plan['contract'],plan['recipients'],plan['old_versions'])
+        if fresh['plan_id']!=plan_id: raise ValueError('plan_stale')
+        plan_items={x['key']:x for x in plan['items']}
     selected=reconcile(db_path,version);made=[]
     for f in db.execute('SELECT * FROM file_entry WHERE version=? ORDER BY path',(version,)):
         target=(out/f['path']).resolve()
         if not target.is_relative_to(out.resolve()): raise ValueError('unsafe_output')
         chunks=list(db.execute('SELECT * FROM chunk WHERE file_id=? ORDER BY idx',(f['id'],)))
-        if any(selected.get(f"{f['path']}:{c['idx']}") is None for c in chunks): continue
+        needs=[];complete=True
+        for c in chunks:
+            key=f"{f['path']}:{c['idx']}"; rid=selected.get(key)
+            if rid is not None:
+                needs.append(('receipt',rid,c))
+            elif plan_items is not None and plan_items[key]['conclusion']=='reusable' \
+                    and plan_items[key]['basis']=='content_reuse_old_delivery':
+                needs.append(('reuse',plan_items[key]['eligible'],c))
+            else:
+                complete=False;break
+        if not complete: continue
         target.parent.mkdir(parents=True,exist_ok=True); temp=target.with_suffix(target.suffix+'.part')
+        proof_rows=[]
         with temp.open('wb') as stream:
-            for c in chunks:
-                rid=selected[f"{f['path']}:{c['idx']}"]
-                rec=db.execute('SELECT r.path,a.root FROM receipt r JOIN attempt a ON a.id=r.attempt_id WHERE r.id=?',(rid,)).fetchone()
-                candidate=(Path(rec['root'])/rec['path']).resolve()
-                if not candidate.is_relative_to(Path(rec['root']).resolve()):raise ValueError('unsafe_path')
-                data=candidate.read_bytes()
-                if sha(data)!=c['sha256'] or len(data)!=c['end']-c['start']: raise ValueError('source_changed')
-                stream.write(data)
+            for kind,ref,c in needs:
+                if kind=='receipt':
+                    rec=db.execute('SELECT r.path,a.root FROM receipt r JOIN attempt a ON a.id=r.attempt_id WHERE r.id=?',(ref,)).fetchone()
+                    candidate=(Path(rec['root'])/rec['path']).resolve()
+                    if not candidate.is_relative_to(Path(rec['root']).resolve()):raise ValueError('unsafe_path')
+                    data=candidate.read_bytes()
+                    if sha(data)!=c['sha256'] or len(data)!=c['end']-c['start']: raise ValueError('source_changed')
+                    stream.write(data);proof_rows.append(('receipt',ref,None))
+                else:
+                    data=reuse.read_source(ref['source_root'],ref['source_path'])
+                    if data is None or sha(data)!=c['sha256'] or len(data)!=c['end']-c['start']:
+                        raise ValueError('reuse_source_changed')
+                    stream.write(data);proof_rows.append(('reuse',ref,c))
         if target.exists() and sha(target.read_bytes())!=f['sha256']:
             temp.unlink();raise ValueError('output_conflict')
         os.replace(temp,target)
-        proof=[selected[f"{f['path']}:{c['idx']}"] for c in chunks]
+        receipt_only=[ref for kind,ref,_ in proof_rows if kind=='receipt']
         with db:
             db.execute('INSERT OR REPLACE INTO assembled_file(version,file_id,path,hash,receipt_ids) VALUES (?,?,?,?,?)',
-                       (version,f['id'],str(target),sha(target.read_bytes()),json.dumps(proof)))
+                       (version,f['id'],str(target),sha(target.read_bytes()),json.dumps(receipt_only)))
+            db.execute('DELETE FROM assembled_proof WHERE version=? AND file_id=?',(version,f['id']))
+            for position,(kind,ref,c) in enumerate(proof_rows):
+                if kind=='receipt':
+                    db.execute('INSERT INTO assembled_proof(version,file_id,position,kind,proof_id) VALUES (?,?,?,?,?)',
+                               (version,f['id'],position,'receipt',ref))
+                else:
+                    pid=db.execute('INSERT OR REPLACE INTO reuse_proof(plan_id,version,chunk_id,old_version,old_receipt_id,source_medium,source_root,source_path,sha256,size,status) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+                        (plan_id,version,c['id'],ref['old_version'],ref['old_receipt_id'],ref['medium'],
+                         ref['source_root'],ref['source_path'],c['sha256'],c['end']-c['start'],'verified')).lastrowid
+                    db.execute('INSERT INTO assembled_proof(version,file_id,position,kind,proof_id) VALUES (?,?,?,?,?)',
+                               (version,f['id'],position,'reuse',pid))
         made.append(str(target))
     db.close();return made
 
 def seal(db_path,version,out):
+    from . import reuse
     db=connect(db_path); outcomes={}
     with db:
         db.execute('DELETE FROM decision WHERE version=?',(version,))
@@ -128,12 +167,21 @@ def seal(db_path,version,out):
             if size!=f['size'] or digest.hexdigest()!=f['sha256']:
                 outcomes[f['path']]='corrupt';continue
             proof=db.execute('SELECT * FROM assembled_file WHERE version=? AND file_id=?',(version,f['id'])).fetchone()
-            required=list(db.execute('SELECT id FROM chunk WHERE file_id=?',(f['id'],)))
-            receipt_ids=json.loads(proof['receipt_ids']) if proof else []
-            verified={r['chunk_id'] for rid in receipt_ids for r in db.execute(
-                "SELECT chunk_id FROM receipt WHERE id=? AND status='verified'",(rid,))}
+            required={c['id'] for c in db.execute('SELECT id FROM chunk WHERE file_id=?',(f['id'],))}
+            chain=list(db.execute('SELECT * FROM assembled_proof WHERE version=? AND file_id=? ORDER BY position',(version,f['id'])))
+            verified=set();proof_invalid=False
+            for link in chain:
+                if link['kind']=='receipt':
+                    rows=db.execute("SELECT chunk_id FROM receipt WHERE id=? AND status='verified'",(link['proof_id'],)).fetchall()
+                    verified.update(r['chunk_id'] for r in rows)
+                else:
+                    rp=db.execute('SELECT * FROM reuse_proof WHERE id=?',(link['proof_id'],)).fetchone()
+                    ok,_=reuse.proof_current(db,rp) if rp else (False,None)
+                    if not ok:proof_invalid=True
+                    else:verified.add(rp['chunk_id'])
             outcomes[f['path']]='verified' if (proof and Path(proof['path']).resolve()==path.resolve()
-                and proof['hash']==digest.hexdigest() and verified=={c['id'] for c in required}) else 'unproven'
+                and proof['hash']==digest.hexdigest() and not proof_invalid
+                and verified==required and len(chain)==len(required)) else 'unproven'
         status='可发布' if outcomes and all(x=='verified' for x in outcomes.values()) else ('拒收' if 'corrupt' in outcomes.values() else '证据不足')
         db.execute('INSERT INTO decision(version,result,detail) VALUES (?,?,?)',(version,status,json.dumps(outcomes,sort_keys=True)))
         db.execute('UPDATE delivery SET status=? WHERE id=(SELECT delivery_id FROM manifest WHERE version=?)',(status,version))
@@ -147,7 +195,10 @@ def report(db_path,version,path):
     'decision':[dict(r) for r in db.execute('SELECT result,detail FROM decision WHERE version=?',(version,))],
     'assemblies':[dict(r) for r in db.execute('SELECT file_id,path,hash,receipt_ids FROM assembled_file WHERE version=?',(version,))],
     'custody':[dict(r) for r in db.execute('SELECT medium,seq,from_holder,to_holder,at,status FROM custody_event WHERE version=? ORDER BY medium,seq',(version,))],
-    'acceptance':[dict(r) for r in db.execute('SELECT recipient_id,result,reason FROM acceptance WHERE version=? ORDER BY recipient_id',(version,))]}
+    'acceptance':[dict(r) for r in db.execute('SELECT recipient_id,result,reason FROM acceptance WHERE version=? ORDER BY recipient_id',(version,))],
+    'reuse_plans':[dict(r) for r in db.execute('SELECT id,version,contract,recipients,old_versions,frozen FROM reuse_plan WHERE version=?',(version,))],
+    'reuse_proofs':[dict(r) for r in db.execute('SELECT id,plan_id,version,chunk_id,old_version,old_receipt_id,source_medium,source_path,sha256,size,status FROM reuse_proof WHERE version=?',(version,))],
+    'proof_chain':[dict(r) for r in db.execute('SELECT version,file_id,position,kind,proof_id FROM assembled_proof WHERE version=? ORDER BY file_id,position',(version,))]}
     path=Path(path);path.parent.mkdir(parents=True,exist_ok=True);path.write_text(json.dumps(obj,ensure_ascii=False,indent=2),encoding='utf-8')
     path.with_suffix('.md').write_text('# 分段传验报告\n\n'+f"结论：{obj['decision'][0]['result'] if obj['decision'] else '未封验'}\n\n"+json.dumps(obj,ensure_ascii=False,indent=2),encoding='utf-8')
     db.close();return path

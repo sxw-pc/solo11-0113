@@ -2,7 +2,8 @@ import argparse
 import json
 import tempfile
 from pathlib import Path
-from . import engine, custody, rollout
+from . import engine, custody, rollout, reuse
+from .store import connect
 
 def demo():
     root=Path(tempfile.mkdtemp(prefix='chunkproof-'));src=root/'source';src.mkdir();(src/'sample.dat').write_bytes(b'abcdefghij')
@@ -18,7 +19,6 @@ def demo():
     result=engine.seal(db,version,root/'out')
     custody.transfer(db,version,'medium-1',1,'origin','carrier','2026-01-01T08:00:00Z')
     custody.recipient(db,'recipient-1','2026-01-02T00:00:00Z')
-    from .store import connect
     ledger=connect(db);body_hash=ledger.execute('SELECT body_hash FROM manifest WHERE version=?',(version,)).fetchone()['body_hash'];ledger.close()
     custody.acknowledge(db,'recipient-1',version,body_hash,'2026-01-01T09:00:00Z','accepted')
     print(engine.report(db,version,root/'report.json'));print(result,custody.decide(db,'recipient-1',version))
@@ -37,10 +37,18 @@ def main():
     a=sub.add_parser('acceptance');a.add_argument('--db',required=True);a.add_argument('--name',required=True);a.add_argument('--version',required=True)
     a=sub.add_parser('rollout-create');a.add_argument('--db',required=True);a.add_argument('--id',required=True);a.add_argument('--version',required=True);a.add_argument('--policy',required=True)
     a=sub.add_parser('rollout-evaluate');a.add_argument('--db',required=True);a.add_argument('--id',required=True)
+    rp=sub.add_parser('reuse-plan')
+    rp.add_argument('--db',required=True);rp.add_argument('--version',required=True)
+    rp.add_argument('--contract',required=True,choices=list(reuse.CONTRACTS))
+    rp.add_argument('--recipient',action='append',required=True,dest='recipients')
+    rp.add_argument('--old-version',action='append',dest='old_versions')
+    rp.add_argument('--freeze',action='store_true')
     for command in ('verify-chunks','reconcile','assemble','seal','report'):
         q=sub.add_parser(command);q.add_argument('--db',required=True);q.add_argument('--version',required=True)
         if command=='verify-chunks':q.add_argument('--medium',required=True);q.add_argument('--root',required=True)
-        if command=='assemble':q.add_argument('--root',required=True);q.add_argument('--out',required=True)
+        if command=='assemble':
+            q.add_argument('--root',required=True);q.add_argument('--out',required=True)
+            q.add_argument('--plan',help='已冻结的复用计划 JSON（reuse-plan --freeze 的输出）；缺省走普通本版回执组装')
         if command=='seal':q.add_argument('--out',required=True)
         if command=='report':q.add_argument('--path',required=True)
     x=p.parse_args()
@@ -54,9 +62,15 @@ def main():
     elif x.command=='acceptance':print(custody.decide(x.db,x.name,x.version))
     elif x.command=='rollout-create':print(rollout.create(x.db,x.id,x.version,json.loads(Path(x.policy).read_text(encoding='utf-8'))))
     elif x.command=='rollout-evaluate':print(rollout.evaluate(x.db,x.id))
+    elif x.command=='reuse-plan':
+        plan=reuse.reuse_plan(x.db,x.version,x.contract,x.recipients,x.old_versions)
+        if x.freeze:reuse.freeze_plan(x.db,plan)
+        print(json.dumps(plan,ensure_ascii=False,indent=2,sort_keys=True))
     elif x.command=='verify-chunks':print(engine.verify_chunks(x.db,x.version,x.medium,x.root))
     elif x.command=='reconcile':print(json.dumps(engine.reconcile(x.db,x.version)))
-    elif x.command=='assemble':print(engine.assemble(x.db,x.version,x.root,x.out))
+    elif x.command=='assemble':
+        plan=json.loads(Path(x.plan).read_text(encoding='utf-8')) if x.plan else None
+        print(engine.assemble(x.db,x.version,x.root,x.out,plan))
     elif x.command=='seal':print(engine.seal(x.db,x.version,x.out))
     elif x.command=='report':print(engine.report(x.db,x.version,x.path))
 if __name__=='__main__':main()

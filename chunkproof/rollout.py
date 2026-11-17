@@ -58,8 +58,15 @@ def evaluate(path, rollout_id):
             raise ValueError('unknown_rollout')
         recipients = [r['recipient_id'] for r in db.execute(
             'SELECT DISTINCT recipient_id FROM rollout_member WHERE rollout_id=?', (rollout_id,)).fetchall()]
+        seal = db.execute('SELECT result FROM decision WHERE version=?', (rollout['version'],)).fetchone()
+        seal_publishable = bool(seal and seal['result'] == '可发布')
         db.close()
-        verdicts = {recipient: decide(path, recipient, rollout['version']) for recipient in recipients}
+        # 封验闸门：只有对应版本当前仍可发布时才按收件验收推进波次，
+        # 复用证明失效导致的重新封验结论不会被沿用为旧的可发布结论。
+        if seal_publishable:
+            verdicts = {recipient: decide(path, recipient, rollout['version']) for recipient in recipients}
+        else:
+            verdicts = {recipient: {'result': '待核', 'reason': 'unsealed'} for recipient in recipients}
         db = connect(path)
         waves = []
         blocked = False
