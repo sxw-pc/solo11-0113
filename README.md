@@ -13,3 +13,7 @@
 `custody-transfer` 记录介质交接链，`recipient` 冻结收件要求，`acknowledge` 记录回执，`acceptance` 作最终验收。交接链断裂或隔离介质会使已封验文件仍待核；清单摘要不一致、回执冲突或超期分别产生不同验收结论。相关记录均保存在 SQLite 台账，`demo` 覆盖完整交付。
 
 `rollout-create` 将收件人分入不可变的发布波次，指定权重、通过门槛和必达收件人。`rollout-evaluate` 从实际验收记录计算每波次能否开放、等待、中止或完成；试点未完成时后续波次不开放，必达收件人争议会中止发布。逐收件结论保存在 `rollout_decision`。
+
+## 已封验环境测量网格
+
+`fieldgrid-register` 将两路已封验 JSONL 环境测量点、整数网格坐标、非负观测值与质量代价冻结入台账；`fieldgrid-inspect` 只清点原始点数和重叠位置，尚不选各位置的最终观测。`fixtures/field-grid/` 是可由 `tests/test_fieldgrid.py` 本地运行的合成资料。
