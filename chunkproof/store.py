@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS rollout(id TEXT PRIMARY KEY,version TEXT NOT NULL REF
 CREATE TABLE IF NOT EXISTS rollout_wave(rollout_id TEXT REFERENCES rollout(id),ordinal INT NOT NULL,name TEXT NOT NULL,quorum INT NOT NULL,status TEXT NOT NULL,PRIMARY KEY(rollout_id,ordinal));
 CREATE TABLE IF NOT EXISTS rollout_member(rollout_id TEXT NOT NULL,ordinal INT NOT NULL,recipient_id TEXT NOT NULL REFERENCES recipient(id),weight INT NOT NULL,mandatory INT NOT NULL,PRIMARY KEY(rollout_id,ordinal,recipient_id),FOREIGN KEY(rollout_id,ordinal) REFERENCES rollout_wave(rollout_id,ordinal));
 CREATE TABLE IF NOT EXISTS rollout_decision(rollout_id TEXT NOT NULL,ordinal INT NOT NULL,recipient_id TEXT NOT NULL,result TEXT NOT NULL,reason TEXT NOT NULL,PRIMARY KEY(rollout_id,ordinal,recipient_id));
+CREATE TABLE IF NOT EXISTS media_wear_survey(id TEXT PRIMARY KEY,payload TEXT NOT NULL);
 """
 def connect(path):
     path=Path(path); path.parent.mkdir(parents=True,exist_ok=True)
