@@ -9,3 +9,5 @@
 介质保管子系统用 `custody_event` 记录可信、隔离与交接顺序；收件验收子系统用 `recipient`、`acknowledgement`、`acceptance` 固化条件、回执和结论。验收同时读取封验、保管链、清单版本与回执，封验通过但保管证明失效时仍不能交付。
 
 发布编排使用 `rollout`、`rollout_wave`、`rollout_member`、`rollout_decision` 固化波次、带权重的收件范围和验收快照。各波次顺序开放；权重门槛、必达收件人及实际争议共同决定等待、完成或中止。
+
+地形汇流核算读取 `terrain_grid`/`terrain_cell` 中已冻结的整数格点，先把四邻接同高格凝聚为平坦区（`terrain_route_region`），再只在严格下降的区间边上传播。`terrain_route` 保存模型、阈值、预算和规范化证据及其摘要，`terrain_route_outlet` 保存逐出口负荷。传递量使用有理数，守恒式“本地径流 = 出口收到量 + 封闭区保留量”对每个区和整体同时成立；`terrain-verify` 从格点与已封验字节两路重算并要求与存储证据逐字节一致。

@@ -24,6 +24,29 @@ def demo():
     print(engine.report(db,version,root/'report.json'));print(result,custody.decide(db,'recipient-1',version))
     rollout.create(db,'demo-rollout',version,[{'name':'pilot','quorum':1,'members':[{'recipient':'recipient-1','weight':1,'mandatory':True}]}])
     print(rollout.evaluate(db,'demo-rollout'))
+    demo_terrain(root)
+
+def demo_terrain(root):
+    src=root/'terrain-source';src.mkdir()
+    cells=[{'x':0,'y':0,'height':1,'runoff':1,'outlet':'L'},
+           {'x':1,'y':0,'height':3,'runoff':2},
+           {'x':2,'y':0,'height':1,'runoff':1,'outlet':'R'}]
+    (src/'cells.jsonl').write_text('\n'.join(json.dumps(c) for c in cells)+'\n',encoding='utf-8')
+    (src/'spec.json').write_text(json.dumps({'path':'cells.jsonl','neighbors':4}),encoding='utf-8')
+    db=root/'terrain.db';version=engine.manifest(db,'terrain-delivery',src,64)
+    media=root/'terrain-media';media.mkdir();rows=[]
+    for chunk in engine.plan(db,version):
+        raw=(src/chunk['path']).read_bytes()[chunk['start']:chunk['end']]
+        rel=f"{Path(chunk['path']).name}-{chunk['idx']}.part";(media/rel).write_bytes(raw)
+        rows.append(json.dumps({'file':chunk['path'],'index':chunk['idx'],'path':rel}))
+    receipts=root/'terrain-receipts.jsonl';receipts.write_text('\n'.join(rows),encoding='utf-8')
+    engine.receive(db,version,'terrain-media-1',media,receipts)
+    engine.assemble(db,version,media,root/'terrain-out');engine.seal(db,version,root/'terrain-out')
+    terrain.register(db,'demo-grid',version,src/'spec.json')
+    for model in terrain.MODELS:
+        result=terrain.route(db,'demo-grid',model,{'L':3},f'demo-{model}')
+        print(model,{name:item['passed'] for name,item in result['outlets'].items()})
+    print(terrain.verify(db,'demo-single_flow'))
 
 def main():
     p=argparse.ArgumentParser();sub=p.add_subparsers(dest='command',required=True)
@@ -39,6 +62,8 @@ def main():
     a=sub.add_parser('rollout-evaluate');a.add_argument('--db',required=True);a.add_argument('--id',required=True)
     a=sub.add_parser('terrain-register');a.add_argument('--db',required=True);a.add_argument('--id',required=True);a.add_argument('--version',required=True);a.add_argument('--spec',required=True)
     a=sub.add_parser('terrain-inspect');a.add_argument('--db',required=True);a.add_argument('--id',required=True)
+    a=sub.add_parser('terrain-route');a.add_argument('--db',required=True);a.add_argument('--id',required=True);a.add_argument('--model',required=True,choices=terrain.MODELS);a.add_argument('--thresholds',default='{}');a.add_argument('--route',required=True);a.add_argument('--budget',type=int,default=terrain.DEFAULT_BUDGET)
+    a=sub.add_parser('terrain-verify');a.add_argument('--db',required=True);a.add_argument('--route',required=True)
     for command in ('verify-chunks','reconcile','assemble','seal','report'):
         q=sub.add_parser(command);q.add_argument('--db',required=True);q.add_argument('--version',required=True)
         if command=='verify-chunks':q.add_argument('--medium',required=True);q.add_argument('--root',required=True)
@@ -58,6 +83,8 @@ def main():
     elif x.command=='rollout-evaluate':print(rollout.evaluate(x.db,x.id))
     elif x.command=='terrain-register':print(terrain.register(x.db,x.id,x.version,x.spec))
     elif x.command=='terrain-inspect':print(json.dumps(terrain.inspect(x.db,x.id),ensure_ascii=False))
+    elif x.command=='terrain-route':print(json.dumps(terrain.route(x.db,x.id,x.model,json.loads(x.thresholds),x.route,x.budget),ensure_ascii=False))
+    elif x.command=='terrain-verify':print(json.dumps(terrain.verify(x.db,x.route),ensure_ascii=False))
     elif x.command=='verify-chunks':print(engine.verify_chunks(x.db,x.version,x.medium,x.root))
     elif x.command=='reconcile':print(json.dumps(engine.reconcile(x.db,x.version)))
     elif x.command=='assemble':print(engine.assemble(x.db,x.version,x.root,x.out))

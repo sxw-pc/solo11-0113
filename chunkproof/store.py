@@ -22,6 +22,9 @@ CREATE TABLE IF NOT EXISTS rollout_member(rollout_id TEXT NOT NULL,ordinal INT N
 CREATE TABLE IF NOT EXISTS rollout_decision(rollout_id TEXT NOT NULL,ordinal INT NOT NULL,recipient_id TEXT NOT NULL,result TEXT NOT NULL,reason TEXT NOT NULL,PRIMARY KEY(rollout_id,ordinal,recipient_id));
 CREATE TABLE IF NOT EXISTS terrain_grid(id TEXT PRIMARY KEY,version TEXT NOT NULL REFERENCES manifest(version),spec_hash TEXT NOT NULL,spec BLOB NOT NULL);
 CREATE TABLE IF NOT EXISTS terrain_cell(grid_id TEXT NOT NULL REFERENCES terrain_grid(id),x INTEGER NOT NULL,y INTEGER NOT NULL,height INTEGER NOT NULL,runoff INTEGER NOT NULL,outlet TEXT,PRIMARY KEY(grid_id,x,y));
+CREATE TABLE IF NOT EXISTS terrain_route(route_id TEXT PRIMARY KEY,grid_id TEXT NOT NULL REFERENCES terrain_grid(id),version TEXT NOT NULL REFERENCES manifest(version),cells_hash TEXT NOT NULL,model TEXT NOT NULL,thresholds TEXT NOT NULL,budget INTEGER NOT NULL,status TEXT NOT NULL,evidence BLOB NOT NULL,evidence_hash TEXT NOT NULL,created TEXT DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS terrain_route_region(route_id TEXT NOT NULL REFERENCES terrain_route(route_id),region_id TEXT NOT NULL,height INTEGER NOT NULL,outlet TEXT,runoff TEXT NOT NULL,received TEXT NOT NULL,outflow TEXT NOT NULL,retained TEXT NOT NULL,split TEXT NOT NULL,no_outflow_reason TEXT,cells TEXT NOT NULL,PRIMARY KEY(route_id,region_id));
+CREATE TABLE IF NOT EXISTS terrain_route_outlet(route_id TEXT NOT NULL REFERENCES terrain_route(route_id),outlet TEXT NOT NULL,region_id TEXT NOT NULL,received TEXT NOT NULL,threshold INTEGER,passed INTEGER,contributions TEXT NOT NULL,PRIMARY KEY(route_id,outlet));
 """
 def connect(path):
     path=Path(path); path.parent.mkdir(parents=True,exist_ok=True)
