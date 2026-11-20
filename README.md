@@ -17,3 +17,9 @@
 ## 已封验实体数据清单
 
 `entity-register` 从已封验的两个 JSONL 来源文件及候选关联边文件中冻结伪名化记录、来源内本地 ID 和正整数边权；`entity-inspect` 只报告原始记录量与候选边数，不推断跨来源是否为同一实体。`fixtures/entity-feed/` 和 `fixtures/entity-feed-spec.json` 是可用 `tests/test_entities.py` 离线运行的合成样例，不含真实个人信息。
+
+## 实体对齐评估与证明
+
+`entity-assess --policy operational|certified` 在冻结候选边上求解全局一对一最大权匹配：一条本地记录最多参与一条边，允许不匹配，先最大化全图 weight 总和，再在并列最优中考察匹配条数；去重实体数等于冻结原始行数减匹配条数。`operational` 在所有最高总分匹配中取匹配条数最多者，并按规范化边序贪心固定出一份确定性逐边方案，按所选去重人数对 threshold 给 pass/fail；`certified` 不任取一份，而是证明全部最高总分匹配的最少/最多条数，输出去重人数下上界及两端的可重放见证，仅当上界不超过 threshold 时 pass、下界超过时 fail，否则 indeterminate。多分量按连通分量分别求极值再合成，分量任取一份匹配不会被当作全集证明。搜索受 `--budget` 节点预算约束，预算耗尽只返回 indeterminate 与平凡上下界，绝不把一份可行匹配冒充最优。
+
+评估结果（assessment_id、feed 版本、规范化行/边摘要、policy、threshold、最高总分、条数界、人数界、见证与结论）冻结在不可覆盖的 `entity_assessment` 台账：同 ID 同文幂等、异文冲突；新交付版本另建 feed 与 assessment，旧结果仍可复核且不追随新版本。`entity-verify` 从冻结行/边重算合法性、最优分数与两端极值界并回放见证，篡改边/行、漏掉并列最优、伪造界或换绑 feed 均不能通过。零权、重复边、未知端点在登记时拒绝；无边、同行竞争多边、多歧义分量与不匹配记录均有测试覆盖，另含 20+20 行稀疏图规模用例与预算耗尽用例。`fixtures/entity-feed-multi/` 是多分量合成样例。

@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS rollout_decision(rollout_id TEXT NOT NULL,ordinal INT
 CREATE TABLE IF NOT EXISTS entity_feed(id TEXT PRIMARY KEY,version TEXT NOT NULL REFERENCES manifest(version),spec_hash TEXT NOT NULL,spec BLOB NOT NULL);
 CREATE TABLE IF NOT EXISTS entity_row(feed_id TEXT NOT NULL REFERENCES entity_feed(id),source TEXT NOT NULL,local_id TEXT NOT NULL,cohort TEXT NOT NULL,PRIMARY KEY(feed_id,source,local_id));
 CREATE TABLE IF NOT EXISTS entity_link(feed_id TEXT NOT NULL REFERENCES entity_feed(id),left_id TEXT NOT NULL,right_id TEXT NOT NULL,weight INTEGER NOT NULL,PRIMARY KEY(feed_id,left_id,right_id));
+CREATE TABLE IF NOT EXISTS entity_assessment(id TEXT PRIMARY KEY,feed_id TEXT NOT NULL REFERENCES entity_feed(id),body_hash TEXT NOT NULL,body BLOB NOT NULL,created TEXT DEFAULT CURRENT_TIMESTAMP);
 """
 def connect(path):
     path=Path(path); path.parent.mkdir(parents=True,exist_ok=True)

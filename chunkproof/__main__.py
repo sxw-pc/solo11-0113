@@ -24,6 +24,35 @@ def demo():
     print(engine.report(db,version,root/'report.json'));print(result,custody.decide(db,'recipient-1',version))
     rollout.create(db,'demo-rollout',version,[{'name':'pilot','quorum':1,'members':[{'recipient':'recipient-1','weight':1,'mandatory':True}]}])
     print(rollout.evaluate(db,'demo-rollout'))
+    feed=root/'feed';feed.mkdir()
+    (feed/'north.jsonl').write_text('\n'.join(json.dumps(x,ensure_ascii=False) for x in (
+        {'local_id':'N1','cohort':'north'},{'local_id':'N2','cohort':'north'}))+'\n',encoding='utf-8')
+    (feed/'south.jsonl').write_text('\n'.join(json.dumps(x,ensure_ascii=False) for x in (
+        {'local_id':'S1','cohort':'south'},{'local_id':'S2','cohort':'south'}))+'\n',encoding='utf-8')
+    (feed/'links.jsonl').write_text('\n'.join(json.dumps(x,ensure_ascii=False) for x in (
+        {'left_id':'N1','right_id':'S1','weight':2},
+        {'left_id':'N1','right_id':'S2','weight':1},
+        {'left_id':'N2','right_id':'S1','weight':1}))+'\n',encoding='utf-8')
+    (root/'entity-feed-spec.json').write_text(json.dumps(
+        {'sources':[{'name':'north','path':'north.jsonl'},{'name':'south','path':'south.jsonl'}],
+         'links':'links.jsonl'}),encoding='utf-8')
+    fversion=engine.manifest(db,'entity-delivery',feed,16)
+    fmedia=root/'fmedia';fmedia.mkdir();frows=[]
+    for c in engine.plan(db,fversion):
+        rel=f"fp-{c['path'].replace('/','_')}-{c['idx']}";(fmedia/rel).write_bytes((feed/c['path']).read_bytes()[c['start']:c['end']])
+        frows.append(json.dumps({'file':c['path'],'path':rel,'index':c['idx'],'sha256':c['sha256']}))
+    freceipts=root/'freceipts.jsonl';freceipts.write_text('\n'.join(frows),encoding='utf-8')
+    engine.receive(db,fversion,'feed-medium',fmedia,freceipts)
+    engine.assemble(db,fversion,fmedia,root/'fout')
+    print(engine.seal(db,fversion,root/'fout'))
+    entities.register(db,'demo-feed',fversion,root/'entity-feed-spec.json')
+    print(json.dumps(entities.inspect(db,'demo-feed'),ensure_ascii=False))
+    op=entities.assess(db,'demo-feed','operational',2,'demo-op')
+    cert=entities.assess(db,'demo-feed','certified',2,'demo-cert')
+    print(json.dumps(op,ensure_ascii=False,sort_keys=True))
+    print(json.dumps(cert,ensure_ascii=False,sort_keys=True))
+    print(json.dumps(entities.verify(db,'demo-op'),ensure_ascii=False))
+    print(json.dumps(entities.verify(db,'demo-cert'),ensure_ascii=False))
 
 def main():
     p=argparse.ArgumentParser();sub=p.add_subparsers(dest='command',required=True)
@@ -39,6 +68,8 @@ def main():
     a=sub.add_parser('rollout-evaluate');a.add_argument('--db',required=True);a.add_argument('--id',required=True)
     a=sub.add_parser('entity-register');a.add_argument('--db',required=True);a.add_argument('--id',required=True);a.add_argument('--version',required=True);a.add_argument('--spec',required=True)
     a=sub.add_parser('entity-inspect');a.add_argument('--db',required=True);a.add_argument('--id',required=True)
+    a=sub.add_parser('entity-assess');a.add_argument('--db',required=True);a.add_argument('--feed',required=True);a.add_argument('--policy',choices=('operational','certified'),required=True);a.add_argument('--threshold',type=int,required=True);a.add_argument('--id',required=True);a.add_argument('--budget',type=int,default=entities.DEFAULT_BUDGET)
+    a=sub.add_parser('entity-verify');a.add_argument('--db',required=True);a.add_argument('--id',required=True);a.add_argument('--budget',type=int,default=entities.DEFAULT_BUDGET)
     for command in ('verify-chunks','reconcile','assemble','seal','report'):
         q=sub.add_parser(command);q.add_argument('--db',required=True);q.add_argument('--version',required=True)
         if command=='verify-chunks':q.add_argument('--medium',required=True);q.add_argument('--root',required=True)
@@ -58,6 +89,8 @@ def main():
     elif x.command=='rollout-evaluate':print(rollout.evaluate(x.db,x.id))
     elif x.command=='entity-register':print(entities.register(x.db,x.id,x.version,x.spec))
     elif x.command=='entity-inspect':print(json.dumps(entities.inspect(x.db,x.id),ensure_ascii=False))
+    elif x.command=='entity-assess':print(json.dumps(entities.assess(x.db,x.feed,x.policy,x.threshold,x.id,x.budget),ensure_ascii=False,sort_keys=True))
+    elif x.command=='entity-verify':print(json.dumps(entities.verify(x.db,x.id,x.budget),ensure_ascii=False))
     elif x.command=='verify-chunks':print(engine.verify_chunks(x.db,x.version,x.medium,x.root))
     elif x.command=='reconcile':print(json.dumps(engine.reconcile(x.db,x.version)))
     elif x.command=='assemble':print(engine.assemble(x.db,x.version,x.root,x.out))

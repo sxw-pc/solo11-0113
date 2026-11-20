@@ -9,3 +9,5 @@
 介质保管子系统用 `custody_event` 记录可信、隔离与交接顺序；收件验收子系统用 `recipient`、`acknowledgement`、`acceptance` 固化条件、回执和结论。验收同时读取封验、保管链、清单版本与回执，封验通过但保管证明失效时仍不能交付。
 
 发布编排使用 `rollout`、`rollout_wave`、`rollout_member`、`rollout_decision` 固化波次、带权重的收件范围和验收快照。各波次顺序开放；权重门槛、必达收件人及实际争议共同决定等待、完成或中止。
+
+实体对齐子系统在 `entity_feed`、`entity_row`、`entity_link` 冻结的候选二分图上工作。`entity_assessment` 以规范化 JSON 正文哈希冻结评估：`entity-assess` 用分数变换 `weight*(|L|+1)±1` 的分支定界穷举，先保最大总权再求并列最优中的最少/最多匹配条数，并按连通分量合成全局条数界；operational 另以规范化边序贪心固定一份确定性最大方案，certified 只签发含两端可重放见证的人数界。节点预算耗尽时只落 indeterminate 与平凡界。`entity-verify` 从同一冻结行/边重算最优与极值并回放见证，body 哈希、feed 绑定、行/边摘要、见证合法性与阈值结论逐项核验，任一篡改即失败；同 ID 幂等、异文冲突，新版本不得覆盖旧评估。
