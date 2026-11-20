@@ -22,6 +22,11 @@ CREATE TABLE IF NOT EXISTS rollout_member(rollout_id TEXT NOT NULL,ordinal INT N
 CREATE TABLE IF NOT EXISTS rollout_decision(rollout_id TEXT NOT NULL,ordinal INT NOT NULL,recipient_id TEXT NOT NULL,result TEXT NOT NULL,reason TEXT NOT NULL,PRIMARY KEY(rollout_id,ordinal,recipient_id));
 CREATE TABLE IF NOT EXISTS document_batch(id TEXT PRIMARY KEY,version TEXT NOT NULL REFERENCES manifest(version),spec_hash TEXT NOT NULL,spec BLOB NOT NULL);
 CREATE TABLE IF NOT EXISTS document_row(batch_id TEXT NOT NULL REFERENCES document_batch(id),doc_id TEXT NOT NULL,revision INTEGER NOT NULL,title TEXT NOT NULL,body TEXT NOT NULL,PRIMARY KEY(batch_id,doc_id,revision));
+CREATE TABLE IF NOT EXISTS document_index(id TEXT PRIMARY KEY,batch_id TEXT NOT NULL REFERENCES document_batch(id),version TEXT NOT NULL REFERENCES manifest(version),spec_hash TEXT NOT NULL,line_digest TEXT NOT NULL,revisions_digest TEXT NOT NULL,analyzer TEXT NOT NULL,analyzer_version TEXT NOT NULL,request_digest TEXT NOT NULL,created TEXT DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS document_index_revision(index_id TEXT NOT NULL REFERENCES document_index(id),doc_id TEXT NOT NULL,revision INTEGER NOT NULL,title_sha256 TEXT NOT NULL,body_sha256 TEXT NOT NULL,PRIMARY KEY(index_id,doc_id,revision));
+CREATE TABLE IF NOT EXISTS document_token(index_id TEXT NOT NULL REFERENCES document_index(id),doc_id TEXT NOT NULL,revision INTEGER NOT NULL,field TEXT NOT NULL,pos INTEGER NOT NULL,token TEXT NOT NULL,start INTEGER NOT NULL,end INTEGER NOT NULL,PRIMARY KEY(index_id,doc_id,revision,field,pos));
+CREATE INDEX IF NOT EXISTS document_token_lookup ON document_token(index_id,token,doc_id,revision,field,pos);
+CREATE INDEX IF NOT EXISTS document_token_scope ON document_token(index_id,doc_id,revision,field,pos);
 """
 def connect(path):
     path=Path(path); path.parent.mkdir(parents=True,exist_ok=True)

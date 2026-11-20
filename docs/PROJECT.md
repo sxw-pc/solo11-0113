@@ -9,3 +9,5 @@
 介质保管子系统用 `custody_event` 记录可信、隔离与交接顺序；收件验收子系统用 `recipient`、`acknowledgement`、`acceptance` 固化条件、回执和结论。验收同时读取封验、保管链、清单版本与回执，封验通过但保管证明失效时仍不能交付。
 
 发布编排使用 `rollout`、`rollout_wave`、`rollout_member`、`rollout_decision` 固化波次、带权重的收件范围和验收快照。各波次顺序开放；权重门槛、必达收件人及实际争议共同决定等待、完成或中止。
+
+文档检索子系统在 `document_row` 之上新增 `document_index`、`document_index_revision`、`document_token`：索引绑定批次、版本、spec 摘要、行摘要、分析器规则版本与修订摘要；每个 token 保存文档、修订、字段、字段内位置与原文最小连续码点跨度。`documents-index` 校验封装字节与批次摘要后单事务写入，`documents-search` 按字段内相邻位置匹配并按 `max_revision` 选择每文档可见修订，`documents-verify` 从冻结原文重放分词、核对每个持久 token 与命中/漏命中集合。
