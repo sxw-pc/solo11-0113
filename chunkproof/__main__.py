@@ -6,16 +6,33 @@ from . import engine, custody, rollout, changefeed
 
 def demo():
     root=Path(tempfile.mkdtemp(prefix='chunkproof-'));src=root/'source';src.mkdir();(src/'sample.dat').write_bytes(b'abcdefghij')
+    feed_tx='\n'.join([
+        json.dumps({'tx_id':'d1','source':'A','source_seq':1,'parents':[],'expected_rows':1,'authority':1}),
+        json.dumps({'tx_id':'d2','source':'A','source_seq':3,'parents':['d1'],'expected_rows':1,'authority':1}),
+        json.dumps({'tx_id':'d3','source':'B','source_seq':1,'parents':['d1'],'expected_rows':2,'authority':5}),
+        json.dumps({'tx_id':'d4','source':'C','source_seq':1,'parents':['d1'],'expected_rows':1,'authority':1}),
+        json.dumps({'tx_id':'d5','source':'D','source_seq':1,'parents':['d1'],'expected_rows':1,'authority':1})])
+    feed_rows='\n'.join([
+        json.dumps({'tx_id':'d1','ordinal':0,'entity_key':'a','op':'put','value':1}),
+        json.dumps({'tx_id':'d2','ordinal':0,'entity_key':'b','op':'put','value':2}),
+        json.dumps({'tx_id':'d3','ordinal':0,'entity_key':'x','op':'put','value':100}),
+        json.dumps({'tx_id':'d3','ordinal':1,'entity_key':'y','op':'put','value':100}),
+        json.dumps({'tx_id':'d4','ordinal':0,'entity_key':'x','op':'put','value':7}),
+        json.dumps({'tx_id':'d5','ordinal':0,'entity_key':'y','op':'put','value':8})])
+    (src/'feed-transactions.jsonl').write_text(feed_tx,encoding='utf-8')
+    (src/'feed-rows.jsonl').write_text(feed_rows,encoding='utf-8')
+    (src/'feed-spec.json').write_text(json.dumps({'transactions':'feed-transactions.jsonl','rows':'feed-rows.jsonl'}),encoding='utf-8')
     db=root/'ledger.db';version=engine.manifest(db,'delivery-1',src,4)
     media=root/'media';media.mkdir(); rows=[]
-    data=(src/'sample.dat').read_bytes()
     for c in engine.plan(db,version):
-        rel=f"{c['idx']}.part";part=data[c['start']:c['end']];(media/rel).write_bytes(part)
-        rows.append(json.dumps({'file':'sample.dat','path':rel,'index':c['idx'],'sha256':c['sha256']}))
+        rel=f"{c['path'].replace('/','_')}.{c['idx']}.part"
+        part=(src/c['path']).read_bytes()[c['start']:c['end']];(media/rel).write_bytes(part)
+        rows.append(json.dumps({'file':c['path'],'path':rel,'index':c['idx'],'sha256':c['sha256']}))
     receipts=root/'receipts.jsonl';receipts.write_text('\n'.join(rows),encoding='utf-8')
     engine.receive(db,version,'medium-1',media,receipts)
     engine.assemble(db,version,media,root/'out')
     result=engine.seal(db,version,root/'out')
+    data=(src/'sample.dat').read_bytes()
     custody.transfer(db,version,'medium-1',1,'origin','carrier','2026-01-01T08:00:00Z')
     custody.recipient(db,'recipient-1','2026-01-02T00:00:00Z')
     from .store import connect
@@ -24,6 +41,13 @@ def demo():
     print(engine.report(db,version,root/'report.json'));print(result,custody.decide(db,'recipient-1',version))
     rollout.create(db,'demo-rollout',version,[{'name':'pilot','quorum':1,'members':[{'recipient':'recipient-1','weight':1,'mandatory':True}]}])
     print(rollout.evaluate(db,'demo-rollout'))
+    changefeed.register(db,'demo-feed',version,src/'feed-spec.json')
+    print('inspect:',changefeed.inspect(db,'demo-feed'))
+    for policy in changefeed.POLICIES:
+        snapshot=changefeed.materialize(db,'demo-feed',policy,f'demo-snapshot-{policy}')
+        verdict=changefeed.verify(db,snapshot['snapshot_id'])
+        print(policy,snapshot['selection']['tx_ids'],snapshot['entities'],'verify=',verdict['status'])
+    print('query x:',changefeed.query(db,'demo-snapshot-max_coverage','x'))
 
 def main():
     p=argparse.ArgumentParser();sub=p.add_subparsers(dest='command',required=True)
@@ -39,6 +63,9 @@ def main():
     a=sub.add_parser('rollout-evaluate');a.add_argument('--db',required=True);a.add_argument('--id',required=True)
     a=sub.add_parser('changefeed-register');a.add_argument('--db',required=True);a.add_argument('--id',required=True);a.add_argument('--version',required=True);a.add_argument('--spec',required=True)
     a=sub.add_parser('changefeed-inspect');a.add_argument('--db',required=True);a.add_argument('--id',required=True)
+    a=sub.add_parser('changefeed-materialize');a.add_argument('--db',required=True);a.add_argument('--run',required=True);a.add_argument('--policy',required=True,choices=changefeed.POLICIES);a.add_argument('--snapshot',required=True);a.add_argument('--budget',type=int,default=changefeed.DEFAULT_NODE_BUDGET)
+    a=sub.add_parser('changefeed-verify');a.add_argument('--db',required=True);a.add_argument('--snapshot',required=True);a.add_argument('--budget',type=int,default=changefeed.DEFAULT_NODE_BUDGET)
+    a=sub.add_parser('changefeed-query');a.add_argument('--db',required=True);a.add_argument('--snapshot',required=True);a.add_argument('--key')
     for command in ('verify-chunks','reconcile','assemble','seal','report'):
         q=sub.add_parser(command);q.add_argument('--db',required=True);q.add_argument('--version',required=True)
         if command=='verify-chunks':q.add_argument('--medium',required=True);q.add_argument('--root',required=True)
@@ -58,6 +85,9 @@ def main():
     elif x.command=='rollout-evaluate':print(rollout.evaluate(x.db,x.id))
     elif x.command=='changefeed-register':print(changefeed.register(x.db,x.id,x.version,x.spec))
     elif x.command=='changefeed-inspect':print(json.dumps(changefeed.inspect(x.db,x.id),ensure_ascii=False))
+    elif x.command=='changefeed-materialize':print(json.dumps(changefeed.materialize(x.db,x.run,x.policy,x.snapshot,x.budget),ensure_ascii=False,sort_keys=True))
+    elif x.command=='changefeed-verify':print(json.dumps(changefeed.verify(x.db,x.snapshot,x.budget),ensure_ascii=False,sort_keys=True))
+    elif x.command=='changefeed-query':print(json.dumps(changefeed.query(x.db,x.snapshot,x.key),ensure_ascii=False,sort_keys=True))
     elif x.command=='verify-chunks':print(engine.verify_chunks(x.db,x.version,x.medium,x.root))
     elif x.command=='reconcile':print(json.dumps(engine.reconcile(x.db,x.version)))
     elif x.command=='assemble':print(engine.assemble(x.db,x.version,x.root,x.out))

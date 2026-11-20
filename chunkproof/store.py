@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS rollout_decision(rollout_id TEXT NOT NULL,ordinal INT
 CREATE TABLE IF NOT EXISTS changefeed_run(id TEXT PRIMARY KEY,version TEXT NOT NULL REFERENCES manifest(version),spec_hash TEXT NOT NULL,spec BLOB NOT NULL);
 CREATE TABLE IF NOT EXISTS change_tx(run_id TEXT NOT NULL REFERENCES changefeed_run(id),tx_id TEXT NOT NULL,source TEXT NOT NULL,source_seq INTEGER NOT NULL,parents TEXT NOT NULL,expected_rows INTEGER NOT NULL,authority INTEGER NOT NULL,PRIMARY KEY(run_id,tx_id),UNIQUE(run_id,source,source_seq));
 CREATE TABLE IF NOT EXISTS change_row(run_id TEXT NOT NULL,tx_id TEXT NOT NULL,ordinal INTEGER NOT NULL,entity_key TEXT NOT NULL,op TEXT NOT NULL,value TEXT,PRIMARY KEY(run_id,tx_id,ordinal),FOREIGN KEY(run_id,tx_id) REFERENCES change_tx(run_id,tx_id));
+CREATE TABLE IF NOT EXISTS snapshot(id TEXT PRIMARY KEY,run_id TEXT NOT NULL REFERENCES changefeed_run(id),policy TEXT NOT NULL,status TEXT NOT NULL,evidence_hash TEXT NOT NULL,evidence BLOB NOT NULL,created TEXT DEFAULT CURRENT_TIMESTAMP,UNIQUE(run_id,policy));
 """
 def connect(path):
     path=Path(path); path.parent.mkdir(parents=True,exist_ok=True)
