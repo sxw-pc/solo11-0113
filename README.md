@@ -16,4 +16,6 @@
 
 ## 已封验延迟分位数
 
-`latency-register` 记录已经整文件封验的 JSONL 延迟数据来源；`latency-evaluate` 用最近秩定义计算精确 p95 并判定上限 SLA。现有实现将全部数值与样本 ID 放入内存，默认最多 1000 行。`fixtures/latency/` 和 `tests/test_latency.py` 提供可离线运行的合成样例。
+`latency-register` 记录已经整文件封验的 JSONL 延迟数据来源；`latency-evaluate` 用最近秩定义计算精确 p95 并判定上限 SLA。该路线将全部数值与样本 ID 放入内存，默认最多 1000 行，超限时以 `latency_memory_limit` 拒绝。`fixtures/latency/` 和 `tests/test_latency.py` 提供可离线运行的合成样例。
+
+`latency-assess` 是同一精确定义（最近秩 `ceil(0.95×N)`）的可中断恢复路线，面向内存与暂存双预算受限的环境：整文件 SHA-256 分块校验，JSONL 逐行严格解析（非负整数 `latency_ms`、非空且全批唯一 `sample_id`、UTF-8/JSONL 完整性），任一时刻内存中最多 `memory_rows` 个样本值和有界 ID 检查缓存，超出部分分批排序写入有界暂存（`scratch_bytes`），多路合并求全局精确秩，ID 经磁盘排序合并验证唯一。重复 ID、坏行、封验后字节漂移或零样本只给 `invalid` 且永不签发 SLA；预算确实不足时给 `indeterminate` 并附准确的资源缺口，不用部分顺序统计量冒充精确 p95。评估身份、冻结版本与文件摘要、`limit_ms`、总行数、精确秩和分阶段检查点持久化在 `latency_assessment`；同 ID 同内容重入从稳定检查点恢复或直接返回已签发结果，异文冲突（`assessment_identity_conflict`）。中断的运行不暴露半成品结论；恢复时重验源文件摘要与暂存段，漂移、段缺失或摘要不符即废弃重算。签发结果携带取秩边界证据（`count_less < rank ≤ count_le` 及文件摘要），`latency-recheck` 离线复核该值确为全局第 `ceil(0.95×N)` 个，`latency-assessment` 查询历次结论；新交付版本另起评估，旧结论仍按旧证据可查。

@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS rollout_wave(rollout_id TEXT REFERENCES rollout(id),o
 CREATE TABLE IF NOT EXISTS rollout_member(rollout_id TEXT NOT NULL,ordinal INT NOT NULL,recipient_id TEXT NOT NULL REFERENCES recipient(id),weight INT NOT NULL,mandatory INT NOT NULL,PRIMARY KEY(rollout_id,ordinal,recipient_id),FOREIGN KEY(rollout_id,ordinal) REFERENCES rollout_wave(rollout_id,ordinal));
 CREATE TABLE IF NOT EXISTS rollout_decision(rollout_id TEXT NOT NULL,ordinal INT NOT NULL,recipient_id TEXT NOT NULL,result TEXT NOT NULL,reason TEXT NOT NULL,PRIMARY KEY(rollout_id,ordinal,recipient_id));
 CREATE TABLE IF NOT EXISTS latency_batch(id TEXT PRIMARY KEY,version TEXT NOT NULL REFERENCES manifest(version),spec_hash TEXT NOT NULL,spec BLOB NOT NULL);
+CREATE TABLE IF NOT EXISTS latency_assessment(id TEXT PRIMARY KEY,batch_id TEXT NOT NULL REFERENCES latency_batch(id),version TEXT NOT NULL,limit_ms INTEGER NOT NULL,memory_rows INTEGER NOT NULL,scratch_bytes INTEGER NOT NULL,fingerprint TEXT NOT NULL,status TEXT NOT NULL,checkpoint TEXT NOT NULL,result TEXT,created TEXT DEFAULT CURRENT_TIMESTAMP,updated TEXT DEFAULT CURRENT_TIMESTAMP);
 """
 def connect(path):
     path=Path(path); path.parent.mkdir(parents=True,exist_ok=True)
