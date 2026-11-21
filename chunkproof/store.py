@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS rollout_decision(rollout_id TEXT NOT NULL,ordinal INT
 CREATE TABLE IF NOT EXISTS telemetry_run(id TEXT PRIMARY KEY,version TEXT NOT NULL REFERENCES manifest(version),spec_hash TEXT NOT NULL,spec BLOB NOT NULL);
 CREATE TABLE IF NOT EXISTS telemetry_sample(run_id TEXT NOT NULL REFERENCES telemetry_run(id),device TEXT NOT NULL,seq INTEGER NOT NULL,tick INTEGER NOT NULL,value INTEGER NOT NULL,PRIMARY KEY(run_id,device,seq));
 CREATE TABLE IF NOT EXISTS telemetry_anchor(run_id TEXT NOT NULL REFERENCES telemetry_run(id),device TEXT NOT NULL,tick INTEGER NOT NULL,utc_lo_ms INTEGER NOT NULL,utc_hi_ms INTEGER NOT NULL,PRIMARY KEY(run_id,device,tick));
+CREATE TABLE IF NOT EXISTS telemetry_assessment(id TEXT PRIMARY KEY,run_id TEXT NOT NULL REFERENCES telemetry_run(id),version TEXT NOT NULL,result TEXT NOT NULL,policy TEXT NOT NULL,payload_hash TEXT NOT NULL,payload BLOB NOT NULL,created TEXT DEFAULT CURRENT_TIMESTAMP);
 """
 def connect(path):
     path=Path(path); path.parent.mkdir(parents=True,exist_ok=True)

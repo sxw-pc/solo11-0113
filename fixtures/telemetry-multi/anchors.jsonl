@@ -1,0 +1,8 @@
+{"device": "D1", "tick": 0, "utc_lo_ms": 0, "utc_hi_ms": 100}
+{"device": "D1", "tick": 10, "utc_lo_ms": 9900, "utc_hi_ms": 10100}
+{"device": "D2", "tick": 0, "utc_lo_ms": -50, "utc_hi_ms": 50}
+{"device": "D2", "tick": 14, "utc_lo_ms": 13900, "utc_hi_ms": 14100}
+{"device": "D2", "tick": 28, "utc_lo_ms": 27900, "utc_hi_ms": 28100}
+{"device": "D3", "tick": 100, "utc_lo_ms": 99900, "utc_hi_ms": 100100}
+{"device": "D3", "tick": 108, "utc_lo_ms": 107900, "utc_hi_ms": 108100}
+{"device": "D3", "tick": 117, "utc_lo_ms": 116900, "utc_hi_ms": 117100}

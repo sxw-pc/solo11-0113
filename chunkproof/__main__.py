@@ -6,12 +6,17 @@ from . import engine, custody, rollout, telemetry
 
 def demo():
     root=Path(tempfile.mkdtemp(prefix='chunkproof-'));src=root/'source';src.mkdir();(src/'sample.dat').write_bytes(b'abcdefghij')
+    demo_dir=Path(__file__).resolve().parent/'demo-telemetry'
+    telemetry_dir=src/'telemetry';telemetry_dir.mkdir()
+    for name in ('readings.jsonl','anchors.jsonl','spec.json'):
+        (telemetry_dir/name).write_bytes((demo_dir/name).read_bytes())
     db=root/'ledger.db';version=engine.manifest(db,'delivery-1',src,4)
     media=root/'media';media.mkdir(); rows=[]
-    data=(src/'sample.dat').read_bytes()
     for c in engine.plan(db,version):
-        rel=f"{c['idx']}.part";part=data[c['start']:c['end']];(media/rel).write_bytes(part)
-        rows.append(json.dumps({'file':'sample.dat','path':rel,'index':c['idx'],'sha256':c['sha256']}))
+        rel=f"{len(rows)}.part"
+        part=(src/c['path']).read_bytes()[c['start']:c['end']]
+        (media/rel).write_bytes(part)
+        rows.append(json.dumps({'file':c['path'],'path':rel,'index':c['idx'],'sha256':c['sha256']}))
     receipts=root/'receipts.jsonl';receipts.write_text('\n'.join(rows),encoding='utf-8')
     engine.receive(db,version,'medium-1',media,receipts)
     engine.assemble(db,version,media,root/'out')
@@ -24,6 +29,14 @@ def demo():
     print(engine.report(db,version,root/'report.json'));print(result,custody.decide(db,'recipient-1',version))
     rollout.create(db,'demo-rollout',version,[{'name':'pilot','quorum':1,'members':[{'recipient':'recipient-1','weight':1,'mandatory':True}]}])
     print(rollout.evaluate(db,'demo-rollout'))
+    telemetry.register(db,'demo-run',version,demo_dir/'spec.json')
+    nominal=telemetry.assess(db,'demo-run',5000,6000,10,'nominal','demo-assess-nominal',
+                             nominal_clocks={'D1':{'offset_ms':0,'rate_ms_per_tick':1000}})
+    guaranteed=telemetry.assess(db,'demo-run',5000,6000,10,'guaranteed','demo-assess-guaranteed')
+    print('nominal:',nominal['result'],nominal['reason'],nominal['aggregate_total'])
+    print('guaranteed:',guaranteed['result'],guaranteed['reason'],guaranteed['aggregate_bounds'])
+    print('verify nominal:',telemetry.verify(db,'demo-assess-nominal'))
+    print('verify guaranteed:',telemetry.verify(db,'demo-assess-guaranteed'))
 
 def main():
     p=argparse.ArgumentParser();sub=p.add_subparsers(dest='command',required=True)
@@ -39,6 +52,11 @@ def main():
     a=sub.add_parser('rollout-evaluate');a.add_argument('--db',required=True);a.add_argument('--id',required=True)
     a=sub.add_parser('telemetry-register');a.add_argument('--db',required=True);a.add_argument('--id',required=True);a.add_argument('--version',required=True);a.add_argument('--spec',required=True)
     a=sub.add_parser('telemetry-inspect');a.add_argument('--db',required=True);a.add_argument('--id',required=True)
+    a=sub.add_parser('telemetry-assess');a.add_argument('--db',required=True);a.add_argument('--id',required=True)
+    a.add_argument('--run',required=True);a.add_argument('--start',type=int,required=True);a.add_argument('--end',type=int,required=True)
+    a.add_argument('--threshold',type=int,required=True);a.add_argument('--policy',choices=('nominal','guaranteed'),required=True)
+    a.add_argument('--clocks');a.add_argument('--budget',type=int,default=1_000_000)
+    a=sub.add_parser('telemetry-verify');a.add_argument('--db',required=True);a.add_argument('--id',required=True)
     for command in ('verify-chunks','reconcile','assemble','seal','report'):
         q=sub.add_parser(command);q.add_argument('--db',required=True);q.add_argument('--version',required=True)
         if command=='verify-chunks':q.add_argument('--medium',required=True);q.add_argument('--root',required=True)
@@ -58,6 +76,11 @@ def main():
     elif x.command=='rollout-evaluate':print(rollout.evaluate(x.db,x.id))
     elif x.command=='telemetry-register':print(telemetry.register(x.db,x.id,x.version,x.spec))
     elif x.command=='telemetry-inspect':print(json.dumps(telemetry.inspect(x.db,x.id),ensure_ascii=False))
+    elif x.command=='telemetry-assess':
+        clocks=json.loads(Path(x.clocks).read_text(encoding='utf-8')) if x.clocks else None
+        print(json.dumps(telemetry.assess(x.db,x.run,x.start,x.end,x.threshold,x.policy,x.id,
+                                          nominal_clocks=clocks,budget=x.budget),ensure_ascii=False))
+    elif x.command=='telemetry-verify':print(json.dumps(telemetry.verify(x.db,x.id),ensure_ascii=False))
     elif x.command=='verify-chunks':print(engine.verify_chunks(x.db,x.version,x.medium,x.root))
     elif x.command=='reconcile':print(json.dumps(engine.reconcile(x.db,x.version)))
     elif x.command=='assemble':print(engine.assemble(x.db,x.version,x.root,x.out))
