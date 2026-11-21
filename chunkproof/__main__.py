@@ -6,12 +6,17 @@ from . import engine, custody, rollout, framed
 
 def demo():
     root=Path(tempfile.mkdtemp(prefix='chunkproof-'));src=root/'source';src.mkdir();(src/'sample.dat').write_bytes(b'abcdefghij')
+    events=[{'event_id':'e1','kind':'arrival','text':'CPR1 appears inside a valid payload'},
+            {'event_id':'e2','kind':'arrival','text':'middle frame'},
+            {'event_id':'e3','kind':'departure','text':'later intact frame'}]
+    frames=[framed.pack(i,e) for i,e in enumerate(events,1)]
+    damaged=bytearray(frames[1]);damaged[damaged.index(b'middle')]=ord('x');frames[1]=bytes(damaged)
+    (src/'events.cpr').write_bytes(b''.join(frames))
     db=root/'ledger.db';version=engine.manifest(db,'delivery-1',src,4)
     media=root/'media';media.mkdir(); rows=[]
-    data=(src/'sample.dat').read_bytes()
     for c in engine.plan(db,version):
-        rel=f"{c['idx']}.part";part=data[c['start']:c['end']];(media/rel).write_bytes(part)
-        rows.append(json.dumps({'file':'sample.dat','path':rel,'index':c['idx'],'sha256':c['sha256']}))
+        rel=f"{c['path']}.{c['idx']}.part";part=(src/c['path']).read_bytes()[c['start']:c['end']];(media/rel).write_bytes(part)
+        rows.append(json.dumps({'file':c['path'],'path':rel,'index':c['idx'],'sha256':c['sha256']}))
     receipts=root/'receipts.jsonl';receipts.write_text('\n'.join(rows),encoding='utf-8')
     engine.receive(db,version,'medium-1',media,receipts)
     engine.assemble(db,version,media,root/'out')
@@ -24,6 +29,17 @@ def demo():
     print(engine.report(db,version,root/'report.json'));print(result,custody.decide(db,'recipient-1',version))
     rollout.create(db,'demo-rollout',version,[{'name':'pilot','quorum':1,'members':[{'recipient':'recipient-1','weight':1,'mandatory':True}]}])
     print(rollout.evaluate(db,'demo-rollout'))
+    framed.register(db,'demo-feed',version,'events.cpr')
+    strict=framed.frame_import(db,'demo-feed',framed.MODE_COMPLETE,'demo-import-complete')
+    independent=framed.frame_import(db,'demo-feed',framed.MODE_INDEPENDENT,'demo-import-independent')
+    print('frame-import complete_stream:',strict['conclusion'],
+          'usable=',[e['event_id'] for e in strict['events'] if e['usable']],
+          'issues=',[(i['code'],i['start'],i['end']) for i in strict['issues']])
+    print('frame-import independent_records:',independent['conclusion'],
+          'usable=',[e['event_id'] for e in independent['events'] if e['usable']],
+          'gaps=',independent['sequence_gaps'],
+          'issues=',[(i['code'],i['start'],i['end']) for i in independent['issues']])
+    print('frame-verify:',framed.frame_verify(db,'demo-import-independent'))
 
 def main():
     p=argparse.ArgumentParser();sub=p.add_subparsers(dest='command',required=True)
@@ -39,6 +55,8 @@ def main():
     a=sub.add_parser('rollout-evaluate');a.add_argument('--db',required=True);a.add_argument('--id',required=True)
     a=sub.add_parser('frame-register');a.add_argument('--db',required=True);a.add_argument('--id',required=True);a.add_argument('--version',required=True);a.add_argument('--file',required=True)
     a=sub.add_parser('frame-decode');a.add_argument('--db',required=True);a.add_argument('--id',required=True)
+    a=sub.add_parser('frame-import');a.add_argument('--db',required=True);a.add_argument('--feed',required=True);a.add_argument('--mode',required=True,choices=(framed.MODE_COMPLETE,framed.MODE_INDEPENDENT));a.add_argument('--import-id',required=True)
+    a=sub.add_parser('frame-verify');a.add_argument('--db',required=True);a.add_argument('--import-id',required=True)
     for command in ('verify-chunks','reconcile','assemble','seal','report'):
         q=sub.add_parser(command);q.add_argument('--db',required=True);q.add_argument('--version',required=True)
         if command=='verify-chunks':q.add_argument('--medium',required=True);q.add_argument('--root',required=True)
@@ -58,6 +76,8 @@ def main():
     elif x.command=='rollout-evaluate':print(rollout.evaluate(x.db,x.id))
     elif x.command=='frame-register':print(framed.register(x.db,x.id,x.version,x.file))
     elif x.command=='frame-decode':print(json.dumps(framed.decode(x.db,x.id),ensure_ascii=False))
+    elif x.command=='frame-import':print(json.dumps(framed.frame_import(x.db,x.feed,x.mode,x.import_id),ensure_ascii=False))
+    elif x.command=='frame-verify':print(json.dumps(framed.frame_verify(x.db,x.import_id),ensure_ascii=False))
     elif x.command=='verify-chunks':print(engine.verify_chunks(x.db,x.version,x.medium,x.root))
     elif x.command=='reconcile':print(json.dumps(engine.reconcile(x.db,x.version)))
     elif x.command=='assemble':print(engine.assemble(x.db,x.version,x.root,x.out))

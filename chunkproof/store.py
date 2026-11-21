@@ -21,6 +21,9 @@ CREATE TABLE IF NOT EXISTS rollout_wave(rollout_id TEXT REFERENCES rollout(id),o
 CREATE TABLE IF NOT EXISTS rollout_member(rollout_id TEXT NOT NULL,ordinal INT NOT NULL,recipient_id TEXT NOT NULL REFERENCES recipient(id),weight INT NOT NULL,mandatory INT NOT NULL,PRIMARY KEY(rollout_id,ordinal,recipient_id),FOREIGN KEY(rollout_id,ordinal) REFERENCES rollout_wave(rollout_id,ordinal));
 CREATE TABLE IF NOT EXISTS rollout_decision(rollout_id TEXT NOT NULL,ordinal INT NOT NULL,recipient_id TEXT NOT NULL,result TEXT NOT NULL,reason TEXT NOT NULL,PRIMARY KEY(rollout_id,ordinal,recipient_id));
 CREATE TABLE IF NOT EXISTS frame_feed(id TEXT PRIMARY KEY,version TEXT NOT NULL REFERENCES manifest(version),file_path TEXT NOT NULL,file_sha256 TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS frame_import(id TEXT PRIMARY KEY,feed_id TEXT NOT NULL REFERENCES frame_feed(id),mode TEXT NOT NULL,conclusion TEXT NOT NULL,version TEXT NOT NULL,file_path TEXT NOT NULL,file_sha256 TEXT NOT NULL,file_size INTEGER NOT NULL,report TEXT NOT NULL,created TEXT DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS frame_import_event(import_id TEXT NOT NULL REFERENCES frame_import(id),"offset" INTEGER NOT NULL,length INTEGER NOT NULL,sequence INTEGER NOT NULL,event_id TEXT NOT NULL,frame_digest TEXT NOT NULL,usable INTEGER NOT NULL,record TEXT NOT NULL,PRIMARY KEY(import_id,"offset"));
+CREATE TABLE IF NOT EXISTS frame_import_issue(id INTEGER PRIMARY KEY,import_id TEXT NOT NULL REFERENCES frame_import(id),code TEXT NOT NULL,start INTEGER NOT NULL,"end" INTEGER NOT NULL,detail TEXT NOT NULL);
 """
 def connect(path):
     path=Path(path); path.parent.mkdir(parents=True,exist_ok=True)

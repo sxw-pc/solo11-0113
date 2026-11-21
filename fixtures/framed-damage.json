@@ -1,0 +1,34 @@
+{
+  "scenarios": {
+    "bad_header_resync": {
+      "comment": "Second frame header overwritten with non-CPR1 garbage; class B bounded scan must find e3 without trusting any header in the gap.",
+      "events": [
+        {"event_id": "h1", "kind": "arrival", "text": "before damaged header"},
+        {"event_id": "h2", "kind": "arrival", "text": "header will be destroyed"},
+        {"event_id": "h3", "kind": "departure", "text": "recovered by bounded magic scan"}
+      ],
+      "damage": {"sequence": 2, "mode": "header", "bytes": "XXXX"}
+    },
+    "pseudo_magic": {
+      "comment": "Damaged frame contains a CPR1-looking candidate whose declared length/CRC cannot validate; it must never be treated as a boundary. Only e3 is a real resync start.",
+      "events": [
+        {"event_id": "p1", "kind": "arrival", "text": "before pseudo magic"},
+        {"event_id": "p2", "kind": "arrival", "text": "payload rewritten around a fake magic"},
+        {"event_id": "p3", "kind": "departure", "text": "only provable restart point"}
+      ],
+      "damage": {"sequence": 2, "mode": "pseudo_magic"}
+    },
+    "ambiguous_resync": {
+      "comment": "Two fully valid but mutually exclusive frames compete for the same successor sequence after a damaged region; import must be indeterminate and neither candidate delivered.",
+      "events": [
+        {"event_id": "a1", "kind": "arrival", "text": "stable prefix"},
+        {"event_id": "a2", "kind": "arrival", "text": "damaged frame"},
+        {"event_id": "a3", "kind": "departure", "text": "original continuation"}
+      ],
+      "extra_events": [
+        {"event_id": "a3-alt", "kind": "departure", "text": "competing continuation"}
+      ],
+      "damage": {"sequence": 2, "mode": "header", "bytes": "ZZZZ"}
+    }
+  }
+}

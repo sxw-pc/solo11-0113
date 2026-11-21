@@ -9,3 +9,5 @@
 介质保管子系统用 `custody_event` 记录可信、隔离与交接顺序；收件验收子系统用 `recipient`、`acknowledgement`、`acceptance` 固化条件、回执和结论。验收同时读取封验、保管链、清单版本与回执，封验通过但保管证明失效时仍不能交付。
 
 发布编排使用 `rollout`、`rollout_wave`、`rollout_member`、`rollout_decision` 固化波次、带权重的收件范围和验收快照。各波次顺序开放；权重门槛、必达收件人及实际争议共同决定等待、完成或中止。
+
+结构化记录导入在物理封验之上工作，不修补字节、不改变文件级封验或介质/收件/波次结论。`frame_import` 在读之前把模式冻结为 `complete_stream`（要求序号自 1 起连续、任一损坏即整次拒收）或 `independent_records`（保留可独立验证的帧并输出缺口字节区间与序号缺口）。扫描器 `_Scanner` 前向流式读取，驻留量以读取块加单个重同步窗口为界，单帧 payload 受 `MAX_PAYLOAD` 限制；重同步只把仍可解析的坏帧声明长度当候选跳跃，坏头则在有界窗口内对每个 magic 候选重做边界、CRC、UTF-8、JSON、身份和序号验证。多个互斥且完整的重同步解释产生 `ambiguous_resync` 并隔离后缀；预算耗尽或中断产生 `indeterminate`，不提交半完成结果。证据写入只增不改的 `frame_import`、`frame_import_event`（含 usable 标记）和 `frame_import_issue`，同 `import_id` 同文幂等、异文冲突；`frame_verify` 从冻结来源重新推导并逐帧复核，关系表与 JSON 报告任一处被手改都与重扫结果不符而失败。
